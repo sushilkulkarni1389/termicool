@@ -1,0 +1,25 @@
+{
+  "name": "TermiCool Default",
+  "colors": {
+    "background": "#000000",
+    "foreground": "#ffffff",
+    "cursor": "#ffffff",
+    "selection": "#444444",
+    "black": "#000000",
+    "red": "#ff0000",
+    "green": "#00ff00",
+    "yellow": "#ffff00",
+    "blue": "#0000ff",
+    "magenta": "#ff00ff",
+    "cyan": "#00ffff",
+    "white": "#ffffff",
+    "brightBlack": "#808080",
+    "brightRed": "#ff5555",
+    "brightGreen": "#55ff55",
+    "brightYellow": "#ffff55",
+    "brightBlue": "#5555ff",
+    "brightMagenta": "#ff55ff",
+    "brightCyan": "#55ffff",
+    "brightWhite": "#ffffff"
+  }
+}
