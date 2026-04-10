@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 const THEMES_JSON: &str = r##"[
+  {"id": "termicool_default", "name": "TermiCool Default", "bg": "#1a1b26", "fg": "#a9b1d6", "cursor": "#c0caf5", "selection": "#33467C", "black": "#32344a", "red": "#f7768e", "green": "#9ece6a", "yellow": "#e0af68", "blue": "#7aa2f7", "magenta": "#ad8ee6", "cyan": "#449dab", "white": "#787c99"},
   {"id": "dracula", "name": "Dracula", "bg": "#282a36", "fg": "#f8f8f2", "cursor": "#f8f8f2", "selection": "#44475a", "black": "#21222c", "red": "#ff5555", "green": "#50fa7b", "yellow": "#f1fa8c", "blue": "#bd93f9", "magenta": "#ff79c6", "cyan": "#8be9fd", "white": "#f8f8f2"},
   {"id": "nord", "name": "Nord", "bg": "#2e3440", "fg": "#d8dee9", "cursor": "#d8dee9", "selection": "#434c5e", "black": "#3b4252", "red": "#bf616a", "green": "#a3be8c", "yellow": "#ebcb8b", "blue": "#81a1c1", "magenta": "#b48ead", "cyan": "#88c0d0", "white": "#e5e9f0"},
   {"id": "monokai", "name": "Monokai", "bg": "#272822", "fg": "#f8f8f2", "cursor": "#f8f8f2", "selection": "#49483e", "black": "#272822", "red": "#f92672", "green": "#a6e22e", "yellow": "#f4bf75", "blue": "#66d9ef", "magenta": "#ae81ff", "cyan": "#a1efe4", "white": "#f8f8f2"},
@@ -50,6 +51,38 @@ fn init_themes() -> Result<(), String> {
 
     let count = fs::read_dir(&themes_dir).map_err(|e| e.to_string())?.count();
     if count > 1 {
+        // Ensure TermiCool Default exists for installs predating this entry
+        let default_path = themes_dir.join("termicool_default.json");
+        if !default_path.exists() {
+            let theme = crate::Theme {
+                name: "TermiCool Default".to_string(),
+                colors: crate::Colors {
+                    background: "#1a1b26".to_string(),
+                    foreground: "#a9b1d6".to_string(),
+                    cursor: "#c0caf5".to_string(),
+                    selection: "#33467C".to_string(),
+                    black: "#32344a".to_string(),
+                    red: "#f7768e".to_string(),
+                    green: "#9ece6a".to_string(),
+                    yellow: "#e0af68".to_string(),
+                    blue: "#7aa2f7".to_string(),
+                    magenta: "#ad8ee6".to_string(),
+                    cyan: "#449dab".to_string(),
+                    white: "#787c99".to_string(),
+                    bright_black: "#444b6a".to_string(),
+                    bright_red: "#ff7a93".to_string(),
+                    bright_green: "#b9f27c".to_string(),
+                    bright_yellow: "#ff9e64".to_string(),
+                    bright_blue: "#7da6ff".to_string(),
+                    bright_magenta: "#bb9af7".to_string(),
+                    bright_cyan: "#0db9d7".to_string(),
+                    bright_white: "#acb0d0".to_string(),
+                },
+            };
+            if let Ok(content) = serde_json::to_string_pretty(&theme) {
+                let _ = fs::write(&default_path, content);
+            }
+        }
         return Ok(());
     }
 

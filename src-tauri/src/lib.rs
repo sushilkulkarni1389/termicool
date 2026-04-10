@@ -45,6 +45,9 @@ mod sandbox;
 
 #[tauri::command]
 fn apply_theme(theme: Theme) -> Result<String, String> {
+    // Re-initialize shell adapter if needed (recovers from post-emergency-revert state)
+    sandbox::init_sandbox()?;
+
     // 1. Apply to macOS (Terminal.app)
     #[cfg(target_os = "macos")]
     {
@@ -82,7 +85,7 @@ fn load_theme(name: String) -> Result<Theme, String> {
     } else {
         // Fallback or just return a default theme if not found
         let fallback_theme = Theme {
-            name: "Default".to_string(),
+            name: "TermiCool Default".to_string(),
             colors: Colors {
                 background: "#1a1b26".to_string(),
                 foreground: "#a9b1d6".to_string(),
@@ -107,7 +110,7 @@ fn load_theme(name: String) -> Result<Theme, String> {
             }
         };
 
-        if name == "default" || name == "Default" {
+        if name == "default" || name == "Default" || name == "termicool_default" {
             return Ok(fallback_theme);
         }
         

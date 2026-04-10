@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { platform } from "@tauri-apps/plugin-os";
-import { useTermStore, Colors } from "./store/useTermStore";
+import { useTermStore, Colors, Theme } from "./store/useTermStore";
 import "./App.css";
 
 function App() {
@@ -98,6 +98,15 @@ function App() {
     try {
       const response = await invoke<string>("revert_to_default");
       setStatus(response);
+      // Reset sidebar selection to "TermiCool Default"
+      const tcDefault = savedThemes.find(t => t.name === "TermiCool Default");
+      if (tcDefault) {
+        setTheme(tcDefault);
+      } else {
+        // Fallback: load from Rust (returns hardcoded default when file is gone)
+        const defaultTheme = await invoke<Theme>("load_theme", { name: "termicool_default" });
+        setTheme(defaultTheme);
+      }
       await refreshSystemState();
     } catch (e) {
       setError(String(e));
