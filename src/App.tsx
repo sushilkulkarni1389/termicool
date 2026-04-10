@@ -58,11 +58,12 @@ function App() {
     if (!theme) return;
     try {
       await invoke<string>("apply_theme", { theme });
+      await invoke<string>("generate_prompt", { modules: promptModules });
       const currentPlatform = platform();
       if (currentPlatform === "linux" || currentPlatform === "windows") {
-        setStatus("Theme Applied! Open a new terminal window to see the changes.");
+        setStatus("Theme and prompt applied! Open a new terminal window to see the changes.");
       } else {
-        setStatus("Theme applied!");
+        setStatus("Theme and prompt applied!");
       }
       refreshSystemState();
     } catch (e) {
@@ -94,16 +95,12 @@ function App() {
   // }
 
   async function handleRevert() {
-    console.log(">>> REACT: handleRevert start");
-    alert("React: Starting Revert");
     try {
       const response = await invoke<string>("revert_to_default");
-      alert("React: Success - " + response);
-      console.log(">>> REACT: Success", response);
+      setStatus(response);
       await refreshSystemState();
     } catch (e) {
-      alert("React: Error - " + e);
-      console.error(">>> REACT: Error", e);
+      setError(String(e));
     }
   }
 

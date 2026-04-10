@@ -21,16 +21,34 @@ pub fn apply(theme: &Theme) -> Result<(), String> {
 
     let profile_path = format!("/org/gnome/terminal/legacy/profiles:/:{}/", uuid);
 
-    // 2. Disable system theme colors to allow custom colors
+    // 2. Backup current dconf profile state before making any changes
+    {
+        if let Ok(home_dir) = dirs::home_dir().ok_or("") {
+            let backup_dir = home_dir.join(".termicool").join("backups");
+            if std::fs::create_dir_all(&backup_dir).is_ok() {
+                let backup_path = backup_dir.join("linux_dconf_profile.dconf");
+                // Only save backup if one doesn't already exist (preserve first/original state)
+                if !backup_path.exists() {
+                    if let Ok(dump) = Command::new("dconf").args(["dump", &profile_path]).output() {
+                        if dump.status.success() {
+                            let _ = std::fs::write(&backup_path, &dump.stdout);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Disable system theme colors to allow custom colors
     dconf_write(&profile_path, "use-theme-colors", "false")?;
 
-    // 3. Set Core Colors (Background, Foreground, Cursor)
+    // 4. Set Core Colors (Background, Foreground, Cursor)
     dconf_write(&profile_path, "background-color", &format!("'{}'", theme.colors.background))?;
     dconf_write(&profile_path, "foreground-color", &format!("'{}'", theme.colors.foreground))?;
     dconf_write(&profile_path, "cursor-colors-set", "true")?;
     dconf_write(&profile_path, "cursor-background-color", &format!("'{}'", theme.colors.cursor))?;
 
-    // 4. Set Palette (16 ANSI colors)
+    // 5. Set Palette (16 ANSI colors)
     let c = &theme.colors;
     let palette = format!(
         "['{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}', '{}']",

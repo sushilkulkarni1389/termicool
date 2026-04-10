@@ -249,24 +249,20 @@ fn check_is_default() -> bool {
         None => return true,
     };
 
-    // 1. Check if backups directory is empty
-    let backup_dir = home_dir.join(".termicool").join("backups");
-    let is_backup_empty = if backup_dir.exists() {
-        std::fs::read_dir(&backup_dir)
-            .map(|mut entries| entries.next().is_none())
-            .unwrap_or(true)
-    } else {
-        true
-    };
+    // 1. Check if .termicool directory exists (this should enable Revert)
+    let termicool_dir = home_dir.join(".termicool");
+    if termicool_dir.exists() {
+        return false;
+    }
 
-    // 2. Check if shell profile has the injection
+    // 2. Check if shell profile has any injection
     let mut profile_injected = false;
-    let profiles = [".zshrc", ".bashrc", ".bash_profile"];
+    let profiles = [".zshrc", ".bashrc", ".bash_profile", ".profile"];
     for p in profiles {
         let path = home_dir.join(p);
         if path.exists() {
             if let Ok(content) = std::fs::read_to_string(path) {
-                if content.contains("termicool/init") {
+                if content.contains(".termicool") {
                     profile_injected = true;
                     break;
                 }
@@ -285,7 +281,7 @@ fn check_is_default() -> bool {
             for path in pwsh_paths {
                 if path.exists() {
                     if let Ok(content) = std::fs::read_to_string(path) {
-                        if content.contains("termicool/init") {
+                        if content.contains(".termicool") {
                             profile_injected = true;
                             break;
                         }
@@ -295,7 +291,7 @@ fn check_is_default() -> bool {
         }
     }
 
-    is_backup_empty && !profile_injected
+    !profile_injected
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

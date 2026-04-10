@@ -177,8 +177,14 @@ fn setup_windows_shell_adapter() -> Result<(), String> {
 }
 
 fn inject_shell_hook() -> Result<(), String> {
-    let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
     let path = get_shell_profile_path()?;
+
+    // Ensure the parent directory exists (needed for Windows PowerShell profile paths)
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+    }
 
     let content = if path.exists() {
         fs::read_to_string(&path).map_err(|e| e.to_string())?
@@ -186,14 +192,7 @@ fn inject_shell_hook() -> Result<(), String> {
         String::new()
     };
 
-    if !content.contains("termicool/init") {
-        let backup_dir = home_dir.join(".termicool").join("backups");
-        fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
-        if path.exists() {
-            let filename = path.file_name().unwrap().to_str().unwrap();
-            fs::copy(&path, backup_dir.join(format!("{}.bak", filename))).map_err(|e| e.to_string())?;
-        }
-
+    if !content.contains(".termicool") {
         let mut file = fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -201,9 +200,9 @@ fn inject_shell_hook() -> Result<(), String> {
             .map_err(|e| e.to_string())?;
 
         #[cfg(not(target_os = "windows"))]
-        let hook = "\n# TermiCool Shell Adapter\n[ -f ~/.termicool/init.sh ] && source ~/.termicool/init.sh\n";
+        let hook = "\n# --- TERMICOOL_START ---\n[ -f ~/.termicool/init.sh ] && source ~/.termicool/init.sh\n# --- TERMICOOL_END ---\n";
         #[cfg(target_os = "windows")]
-        let hook = "\n# TermiCool PowerShell Adapter\nif (Test-Path \"$HOME\\.termicool\\init.ps1\") { . \"$HOME\\.termicool\\init.ps1\" }\n";
+        let hook = "\n# --- TERMICOOL_START ---\nif (Test-Path \"$HOME\\.termicool\\init.ps1\") { . \"$HOME\\.termicool\\init.ps1\" }\n# --- TERMICOOL_END ---\n";
 
         writeln!(file, "{}", hook).map_err(|e| e.to_string())?;
     }
@@ -213,106 +212,197 @@ fn inject_shell_hook() -> Result<(), String> {
 
 pub fn revert_all_to_default() -> Result<String, String> {
     let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
-    let backup_dir = home_dir.join(".termicool").join("backups");
+    let termicool_dir = home_dir.join(".termicool");
 
-    // 1. Robust Shell Restoration
-    let shell_profiles = [".zshrc", ".bashrc", ".bash_profile"];
-    for profile in shell_profiles {
-        let profile_path = home_dir.join(profile);
-        let bak_path = backup_dir.join(format!("{}.bak", profile));
+    // === STEP 1: Read all backups BEFORE deleting ~/.termicool ===
 
-        if bak_path.exists() {
-            fs::copy(&bak_path, &profile_path).map_err(|e| format!("Failed to restore {}: {}", profile, e))?;
-            let _ = fs::remove_file(bak_path);
-        } else if profile_path.exists() {
-            // Remove injection line if backup doesn't exist
-            let content = fs::read_to_string(&profile_path).map_err(|e| e.to_string())?;
-            let filtered: Vec<String> = BufReader::new(content.as_bytes())
-                .lines()
-                .map(|l| l.unwrap())
-                .filter(|line| !line.contains("termicool/init") && !line.contains("TermiCool Shell Adapter"))
-                .collect();
-            fs::write(&profile_path, filtered.join("\n")).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    let original_mac_profile: Option<String> = {
+        let backup_path = termicool_dir.join("backups").join("mac_original_profile.txt");
+        if backup_path.exists() {
+            fs::read_to_string(&backup_path).ok().map(|s| s.trim().to_string())
+        } else {
+            None
         }
+    };
+
+    #[cfg(target_os = "windows")]
+    let windows_backup_content: Option<String> = {
+        let backup_path = termicool_dir.join("backups").join("settings.json.bak");
+        if backup_path.exists() {
+            fs::read_to_string(&backup_path).ok()
+        } else {
+            None
+        }
+    };
+
+    #[cfg(target_os = "linux")]
+    let linux_dconf_backup: Option<Vec<u8>> = {
+        let backup_path = termicool_dir.join("backups").join("linux_dconf_profile.dconf");
+        if backup_path.exists() {
+            fs::read(&backup_path).ok()
+        } else {
+            None
+        }
+    };
+
+    // === STEP 2: Delete ~/.termicool directory ===
+    if termicool_dir.exists() {
+        fs::remove_dir_all(&termicool_dir).map_err(|e| format!("Failed to delete ~/.termicool: {}", e))?;
     }
 
-    // Windows PowerShell profile check
-    #[cfg(target_os = "windows")]
-    {
-        let doc_dir = dirs::document_dir().ok_or("Could not find documents directory")?;
-        let ps_profiles = [
-            doc_dir.join("PowerShell").join("Microsoft.PowerShell_profile.ps1"),
-            doc_dir.join("WindowsPowerShell").join("Microsoft.PowerShell_profile.ps1"),
-        ];
-        for profile_path in ps_profiles {
-            let bak_path = backup_dir.join(format!("{}.bak", profile_path.file_name().unwrap().to_str().unwrap()));
-            if bak_path.exists() {
-                fs::copy(&bak_path, &profile_path).map_err(|e| format!("Failed to restore PS profile: {}", e))?;
-            } else if profile_path.exists() {
-                let content = fs::read_to_string(&profile_path).map_err(|e| e.to_string())?;
+    // === STEP 3: Delete ~/.config/starship.toml (Linux path) ===
+    let starship_config = home_dir.join(".config").join("starship.toml");
+    if starship_config.exists() {
+        let _ = fs::remove_file(starship_config);
+    }
+
+    // === STEP 4: Clean TermiCool injections from all shell profiles ===
+    let shell_profiles = [".zshrc", ".bashrc", ".bash_profile", ".profile"];
+    for profile in shell_profiles {
+        let profile_path = home_dir.join(profile);
+        if profile_path.exists() {
+            let content = fs::read_to_string(&profile_path).map_err(|e| e.to_string())?;
+            if content.contains(".termicool") || content.contains("starship init") {
                 let filtered: Vec<String> = BufReader::new(content.as_bytes())
                     .lines()
                     .map(|l| l.unwrap())
-                    .filter(|line| !line.contains("termicool/init") && !line.contains("TermiCool PowerShell Adapter"))
+                    .filter(|line| {
+                        !line.contains(".termicool") &&
+                        !line.contains("TERMICOOL_START") &&
+                        !line.contains("TERMICOOL_END") &&
+                        !line.contains("starship init")
+                    })
                     .collect();
                 fs::write(&profile_path, filtered.join("\n")).map_err(|e| e.to_string())?;
             }
         }
     }
 
-    // 2. Forceful macOS Reset
-    #[cfg(target_os = "macos")]
+    // === STEP 5: Platform-specific restoration ===
+
+    #[cfg(target_os = "windows")]
     {
-        let original_profile_path = backup_dir.join("mac_original_profile.txt");
-        let original_profile = if original_profile_path.exists() {
-            let p = fs::read_to_string(&original_profile_path).map_err(|e| e.to_string())?.trim().to_string();
-            p.replace('"', "\\\"")
-        } else {
-            "Basic".to_string()
-        };
-
-        println!("DEBUG: Original Profile Name: '{}'", original_profile);
-
-        let script = format!(
-            "tell application \"Terminal\"
-               try
-                 set targetProfile to settings set \"{}\"
-                 set default settings to targetProfile
-                 set startup settings to targetProfile
-                 repeat with w in windows
-                   repeat with t in tabs of w
-                     set current settings of t to targetProfile
-                   end repeat
-                 end repeat
-               on error errText number errNum
-                 return \"Error: \" & errText & \" (\" & errNum & \")\"
-               end try
-             end tell",
-            original_profile
-        );
-
-        println!("DEBUG: Executing AppleScript:\n{}", script);
-
-        let output = Command::new("osascript")
-            .arg("-e")
-            .arg(&script)
-            .output()
-            .map_err(|e| e.to_string())?;
-
-        let error_output = String::from_utf8_lossy(&output.stdout).to_string();
-        if error_output.contains("Error:") {
-            return Err(format!("macOS reset failed: {}", error_output));
+        // Clean PowerShell profiles
+        if let Some(doc_dir) = dirs::document_dir() {
+            let ps_profiles = [
+                doc_dir.join("PowerShell").join("Microsoft.PowerShell_profile.ps1"),
+                doc_dir.join("WindowsPowerShell").join("Microsoft.PowerShell_profile.ps1"),
+            ];
+            for profile_path in ps_profiles {
+                if profile_path.exists() {
+                    let content = fs::read_to_string(&profile_path).map_err(|e| e.to_string())?;
+                    if content.contains(".termicool") || content.contains("starship init") {
+                        let filtered: Vec<String> = BufReader::new(content.as_bytes())
+                            .lines()
+                            .map(|l| l.unwrap())
+                            .filter(|line| {
+                                !line.contains(".termicool") &&
+                                !line.contains("TERMICOOL_START") &&
+                                !line.contains("TERMICOOL_END") &&
+                                !line.contains("starship init")
+                            })
+                            .collect();
+                        fs::write(&profile_path, filtered.join("\n")).map_err(|e| e.to_string())?;
+                    }
+                }
+            }
         }
 
-        if !output.status.success() {
-            return Err(format!("macOS reset command failed: {}", String::from_utf8_lossy(&output.stderr)));
+        // Restore Windows Terminal settings.json from backup
+        if let Some(backup_content) = windows_backup_content {
+            if let Some(local_app_data) = dirs::data_local_dir() {
+                let store_path = local_app_data
+                    .join("Packages")
+                    .join("Microsoft.WindowsTerminal_8wekyb3d8bbwe")
+                    .join("LocalState")
+                    .join("settings.json");
+                let classic_path = local_app_data
+                    .join("Microsoft")
+                    .join("Windows Terminal")
+                    .join("settings.json");
+
+                let target_path = if store_path.exists() {
+                    store_path
+                } else if classic_path.exists() {
+                    classic_path
+                } else {
+                    store_path // default to Store path if neither exists yet
+                };
+
+                if let Some(parent) = target_path.parent() {
+                    let _ = fs::create_dir_all(parent);
+                }
+                let _ = fs::write(&target_path, backup_content);
+            }
         }
     }
 
-    // 3. Cleanup Backup Directory
-    if backup_dir.exists() {
-        let _ = fs::remove_dir_all(&backup_dir);
-        fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        // Use the backed-up profile name, falling back to "Basic" if no backup exists
+        let profile_name = original_mac_profile.as_deref().unwrap_or("Basic");
+
+        let script = format!(
+            "tell application \"Terminal\"\n  \
+               try\n    \
+                 set targetProfile to settings set \"{}\"\n    \
+                 set default settings to targetProfile\n    \
+                 set startup settings to targetProfile\n    \
+                 repeat with w in windows\n      \
+                   repeat with t in tabs of w\n        \
+                     set current settings of t to targetProfile\n      \
+                   end repeat\n    \
+                 end repeat\n  \
+               on error errText number errNum\n    \
+                 return \"Error: \" & errText & \" (\" & errNum & \")\"\n  \
+               end try\n\
+             end tell",
+            profile_name
+        );
+
+        let _ = Command::new("osascript")
+            .arg("-e")
+            .arg(&script)
+            .output();
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Restore original dconf profile from backup, or re-enable system theme colors
+        if let Ok(output) = Command::new("gsettings")
+            .args(["get", "org.gnome.Terminal.ProfilesList", "default"])
+            .output()
+        {
+            let uuid = String::from_utf8_lossy(&output.stdout)
+                .trim()
+                .trim_matches('\'')
+                .to_string();
+            if !uuid.is_empty() {
+                let profile_path = format!("/org/gnome/terminal/legacy/profiles:/:{}/", uuid);
+
+                if let Some(backup_data) = linux_dconf_backup {
+                    // Restore full dconf profile dump
+                    let mut child = Command::new("dconf")
+                        .args(["load", &profile_path])
+                        .stdin(std::process::Stdio::piped())
+                        .spawn()
+                        .ok();
+                    if let Some(ref mut c) = child {
+                        if let Some(stdin) = c.stdin.take() {
+                            let mut writer = std::io::BufWriter::new(stdin);
+                            let _ = writer.write_all(&backup_data);
+                        }
+                        let _ = c.wait();
+                    }
+                } else {
+                    // No backup: re-enable system theme colors as best-effort revert
+                    let _ = Command::new("dconf")
+                        .args(["write", &format!("{}use-theme-colors", profile_path), "true"])
+                        .output();
+                }
+            }
+        }
     }
 
     Ok("System restored to default successfully".to_string())
