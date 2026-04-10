@@ -218,6 +218,9 @@ function App() {
                   >
                     {isLoading ? "Installing..." : isFontInstalled ? "Nerd Font Installed ✓" : "Install Meslo Nerd Font"}
                   </button>
+                  <p className="helper-text">
+                    Note: You must manually set your terminal's font preference to MesloLGS NF after installing.
+                  </p>
                 </div>
                 
                 <div className="settings-card danger">

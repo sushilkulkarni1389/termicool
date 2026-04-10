@@ -239,6 +239,12 @@ button.primary {
   margin-top: 2rem;
 }
 
+.helper-text {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  margin-top: 0.75rem;
+}
+
 .notification {
   position: absolute;
   top: 1rem;
