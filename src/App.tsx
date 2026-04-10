@@ -20,14 +20,25 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
   
   // System State
   const [isFontInstalled, setIsFontInstalled] = useState(false);
   const [isDefaultState, setIsDefaultState] = useState(false);
 
   useEffect(() => {
-    loadInitialTheme();
-    refreshSystemState();
+    async function init() {
+      try {
+        await loadInitialTheme();
+        await refreshSystemState();
+      } catch (e) {
+        window.alert("LINUX STARTUP ERROR: " + JSON.stringify(e));
+        console.error("Initialization failed", e);
+      } finally {
+        setIsInitializing(false);
+      }
+    }
+    init();
   }, []);
 
   async function refreshSystemState() {
@@ -37,6 +48,7 @@ function App() {
       setIsFontInstalled(fontStatus);
       setIsDefaultState(defaultStatus);
     } catch (e) {
+      window.alert("LINUX STARTUP ERROR (refresh): " + JSON.stringify(e));
       console.error("Failed to check system state", e);
     }
   }
@@ -103,7 +115,7 @@ function App() {
     }
   }
 
-  if (!theme) return <div className="loading">Loading...</div>;
+  if (isInitializing) return <div className="loading">Loading...</div>;
 
   const coreColors: (keyof Colors)[] = ["background", "foreground", "cursor", "selection"];
   const normalANSI: (keyof Colors)[] = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"];
@@ -136,7 +148,7 @@ function App() {
             <button className={activeTab === "settings" ? "active" : ""} onClick={() => setActiveTab("settings")}>Settings</button>
           </nav>
 
-          {activeTab === "theme" ? (
+          {activeTab === "theme" && theme ? (
             <div className="tab-content">
               <div className="header-row">
                 <h1>Theme Editor: {activeThemeName}</h1>
@@ -180,6 +192,11 @@ function App() {
               <div className="actions">
                 <button className="primary" onClick={applyTheme}>Apply Theme</button>
               </div>
+            </div>
+          ) : activeTab === "theme" ? (
+            <div className="tab-content">
+              <h1>Theme not loaded</h1>
+              <p>Try refreshing or checking system settings.</p>
             </div>
           ) : activeTab === "prompt" ? (
             <div className="tab-content">
@@ -246,18 +263,18 @@ function App() {
           )}
           
           <div className="terminal-preview" style={{ 
-            backgroundColor: theme.colors.background, 
-            color: theme.colors.foreground,
+            backgroundColor: theme?.colors.background || "#1a1a1a", 
+            color: theme?.colors.foreground || "#fff",
           }}>
             <div className="terminal-header">Terminal Preview</div>
             <div className="terminal-body">
               <p>$ ls -la</p>
-              <p><span style={{ color: theme.colors.blue }}>drwxr-xr-x</span>  5 user  staff  160 Apr  9 12:00 .</p>
-              <p><span style={{ color: theme.colors.green }}>-rw-r--r--</span>  1 user  staff    0 Apr  9 12:00 theme.json</p>
-              <p><span style={{ color: theme.colors.red }}>[ERROR]</span> something went wrong</p>
+              <p><span style={{ color: theme?.colors.blue || "blue" }}>drwxr-xr-x</span>  5 user  staff  160 Apr  9 12:00 .</p>
+              <p><span style={{ color: theme?.colors.green || "green" }}>-rw-r--r--</span>  1 user  staff    0 Apr  9 12:00 theme.json</p>
+              <p><span style={{ color: theme?.colors.red || "red" }}>[ERROR]</span> something went wrong</p>
               <p className="cursor-line">
-                <span style={{ color: theme.colors.magenta }}>~/Documents/TermiCool</span> 
-                <span style={{ color: theme.colors.cyan }}> on  main</span>
+                <span style={{ color: theme?.colors.magenta || "magenta" }}>~/Documents/TermiCool</span> 
+                <span style={{ color: theme?.colors.cyan || "cyan" }}> on  main</span>
               </p>
             </div>
           </div>
