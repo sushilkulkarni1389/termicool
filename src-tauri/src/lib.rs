@@ -220,8 +220,9 @@ async fn download_font() -> Result<String, String> {
         use winreg::enums::*;
         use winreg::RegKey;
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-        if let Ok(key) = hkcu.open_subsection_with_flags("Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts", KEY_WRITE) {
-            let _ = key.set_value(font_name, &dest_path.to_string_lossy().to_string());
+        if let Ok(key) = hkcu.open_subkey_with_flags("Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts", KEY_WRITE) {
+            let font_path_str: String = dest_path.to_string_lossy().to_string();
+            let _ = key.set_value(font_name, &font_path_str);
         }
     }
 

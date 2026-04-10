@@ -106,9 +106,9 @@ fn get_shell_profile_path() -> Result<PathBuf, String> {
             doc_dir.join("PowerShell").join("Microsoft.PowerShell_profile.ps1"),
             doc_dir.join("WindowsPowerShell").join("Microsoft.PowerShell_profile.ps1"),
         ];
-        for p in paths {
+        for p in &paths {
             if p.exists() || p.parent().map(|parent| parent.exists()).unwrap_or(false) {
-                return Ok(p);
+                return Ok(p.clone());
             }
         }
         return Ok(paths[0].clone());
