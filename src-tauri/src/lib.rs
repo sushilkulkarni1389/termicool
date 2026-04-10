@@ -190,12 +190,11 @@ fn revert_to_default() -> Result<String, String> {
 
 #[tauri::command]
 async fn download_font() -> Result<String, String> {
-    let os = std::env::consts::OS;
-    let (font_url, font_name) = if os == "macos" {
-        ("https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular.ttf", "MesloLGS NF Regular.ttf")
-    } else {
-        ("https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular%20Mono.ttf", "MesloLGS NF Regular Mono.ttf")
-    };
+    #[cfg(target_os = "macos")]
+    let (font_url, font_name) = ("https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular.ttf", "MesloLGS NF Regular.ttf");
+    
+    #[cfg(not(target_os = "macos"))]
+    let (font_url, font_name) = ("https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular%20Mono.ttf", "MesloLGS NF Regular Mono.ttf");
 
     let font_dir = dirs::font_dir().ok_or("Could not find fonts directory")?;
     std::fs::create_dir_all(&font_dir).map_err(|e| e.to_string())?;
@@ -206,22 +205,23 @@ async fn download_font() -> Result<String, String> {
     std::fs::write(&dest_path, bytes).map_err(|e| e.to_string())?;
 
     // OS Specific Post-Install
-    if os == "linux" {
+    #[cfg(target_os = "linux")]
+    {
         let _ = std::process::Command::new("fc-cache")
             .arg("-f")
             .arg("-v")
             .output();
-    } else if os == "windows" {
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
         // On Windows, writing to the Fonts directory is not enough for all apps.
         // For a user-level install, registering in the registry is recommended.
-        #[cfg(target_os = "windows")]
-        {
-            use winreg::enums::*;
-            use winreg::RegKey;
-            let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-            if let Ok(key) = hkcu.open_subsection_with_flags("Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts", KEY_WRITE) {
-                let _ = key.set_value(font_name, &dest_path.to_string_lossy().to_string());
-            }
+        use winreg::enums::*;
+        use winreg::RegKey;
+        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+        if let Ok(key) = hkcu.open_subsection_with_flags("Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts", KEY_WRITE) {
+            let _ = key.set_value(font_name, &dest_path.to_string_lossy().to_string());
         }
     }
 
@@ -230,12 +230,11 @@ async fn download_font() -> Result<String, String> {
 
 #[tauri::command]
 fn check_font_installed() -> bool {
-    let os = std::env::consts::OS;
-    let font_name = if os == "macos" {
-        "MesloLGS NF Regular.ttf"
-    } else {
-        "MesloLGS NF Regular Mono.ttf"
-    };
+    #[cfg(target_os = "macos")]
+    let font_name = "MesloLGS NF Regular.ttf";
+    
+    #[cfg(not(target_os = "macos"))]
+    let font_name = "MesloLGS NF Regular Mono.ttf";
 
     dirs::font_dir()
         .map(|dir| dir.join(font_name).exists())
