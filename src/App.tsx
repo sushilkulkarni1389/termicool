@@ -25,6 +25,8 @@ function App() {
   
   // System State
   const [isFontInstalled, setIsFontInstalled] = useState(false);
+  const [isStarshipInstalled, setIsStarshipInstalled] = useState(false);
+  const [isStarshipLoading, setIsStarshipLoading] = useState(false);
   const [isDefaultState, setIsDefaultState] = useState(false);
 
   useEffect(() => {
@@ -45,8 +47,10 @@ function App() {
   async function refreshSystemState() {
     try {
       const fontStatus = await invoke<boolean>("check_font_installed");
+      const starshipStatus = await invoke<boolean>("check_starship_installed");
       const defaultStatus = await invoke<boolean>("check_is_default");
       setIsFontInstalled(fontStatus);
+      setIsStarshipInstalled(starshipStatus);
       setIsDefaultState(defaultStatus);
     } catch (e) {
       window.alert("LINUX STARTUP ERROR (refresh): " + JSON.stringify(e));
@@ -110,6 +114,20 @@ function App() {
       await refreshSystemState();
     } catch (e) {
       setError(String(e));
+    }
+  }
+
+  async function handleStarshipInstall() {
+    setIsStarshipLoading(true);
+    setStatus("Downloading Starship...");
+    try {
+      const msg = await invoke<string>("install_starship");
+      setStatus(msg);
+      await refreshSystemState();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setIsStarshipLoading(false);
     }
   }
 
@@ -252,6 +270,23 @@ function App() {
                   </p>
                 </div>
                 
+                {platform() !== "macos" && (
+                  <div className="settings-card">
+                    <h3>Starship Prompt Installer</h3>
+                    <p>Download and install the Starship prompt binary for a customisable terminal prompt.</p>
+                    <button
+                      onClick={handleStarshipInstall}
+                      disabled={isStarshipLoading || isStarshipInstalled}
+                      className={isStarshipInstalled ? "success-btn" : ""}
+                    >
+                      {isStarshipLoading ? "Installing..." : isStarshipInstalled ? "Starship Installed ✓" : "Install Starship Prompt"}
+                    </button>
+                    <p className="helper-text">
+                      Note: Open a new terminal window after installing to activate the prompt.
+                    </p>
+                  </div>
+                )}
+
                 <div className="settings-card danger">
                   <h3>Failsafe</h3>
                   <p>Restore your shell profile and terminal settings from original backups.</p>

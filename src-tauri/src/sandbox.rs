@@ -178,13 +178,22 @@ fn setup_shell_adapter() -> Result<(), String> {
     };
 
     let init_sh_path = sandbox_dir.join("init.sh");
+    // On Linux, prepend ~/.local/bin so a user-installed starship binary is found
+    let path_setup = if cfg!(target_os = "linux") {
+        "export PATH=\"$HOME/.local/bin:$PATH\"\n"
+    } else {
+        ""
+    };
     let content = format!("# TermiCool Shell Adapter\n\
+                   {}\
                    export STARSHIP_CONFIG=\"{}\"\n\n\
-                   if [ -n \"$ZSH_VERSION\" ]; then\n    \
-                       eval \"$(starship init zsh)\"\n\
-                   elif [ -n \"$BASH_VERSION\" ]; then\n    \
-                       eval \"$(starship init bash)\"\n\
-                   fi\n", starship_config.to_string_lossy());
+                   if command -v starship >/dev/null 2>&1; then\n  \
+                       if [ -n \"$ZSH_VERSION\" ]; then\n    \
+                           eval \"$(starship init zsh)\"\n  \
+                       elif [ -n \"$BASH_VERSION\" ]; then\n    \
+                           eval \"$(starship init bash)\"\n  \
+                       fi\n\
+                   fi\n", path_setup, starship_config.to_string_lossy());
 
     let mut file = fs::File::create(init_sh_path).map_err(|e| e.to_string())?;
     file.write_all(content.as_bytes()).map_err(|e| e.to_string())?;
@@ -200,8 +209,11 @@ fn setup_windows_shell_adapter() -> Result<(), String> {
 
     let init_ps1_path = sandbox_dir.join("init.ps1");
     let content = "# TermiCool PowerShell Adapter\n\
+                   $env:PATH = \"$HOME\\.termicool\\bin;$env:PATH\"\n\
                    $env:STARSHIP_CONFIG = \"$HOME\\.termicool\\config\\starship.toml\"\n\
-                   Invoke-Expression (&starship init powershell)\n";
+                   if (Get-Command starship -ErrorAction SilentlyContinue) {\n    \
+                       Invoke-Expression (&starship init powershell)\n\
+                   }\n";
 
     let mut file = fs::File::create(init_ps1_path).map_err(|e| e.to_string())?;
     file.write_all(content.as_bytes()).map_err(|e| e.to_string())?;
@@ -414,6 +426,13 @@ pub fn revert_all_to_default() -> Result<String, String> {
             if !uuid.is_empty() {
                 let profile_path = format!("/org/gnome/terminal/legacy/profiles:/:{}/", uuid);
 
+                // Clear all TermiCool-set keys first so dconf load is a true replace,
+                // not a merge. Without this, keys like use-theme-colors=false and
+                // custom color values persist even after loading the original backup.
+                let _ = Command::new("dconf")
+                    .args(["reset", "-f", &profile_path])
+                    .output();
+
                 if let Some(backup_data) = linux_dconf_backup {
                     // Restore full dconf profile dump
                     let mut child = Command::new("dconf")
@@ -429,10 +448,7 @@ pub fn revert_all_to_default() -> Result<String, String> {
                         let _ = c.wait();
                     }
                 } else {
-                    // No backup: re-enable system theme colors as best-effort revert
-                    let _ = Command::new("dconf")
-                        .args(["write", &format!("{}use-theme-colors", profile_path), "true"])
-                        .output();
+                    // No backup: system theme colors are already restored by the reset above
                 }
             }
         }

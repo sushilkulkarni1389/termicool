@@ -38,7 +38,11 @@ fn apply_to_file(theme: &Theme, path: PathBuf) -> Result<(), String> {
     fs::create_dir_all(&backup_dir).map_err(|e| format!("Failed to create backup dir: {}", e))?;
     
     let backup_path = backup_dir.join("settings.json.bak");
-    fs::copy(&path, &backup_path).map_err(|e| format!("Backup failed: {}", e))?;
+    // Only write backup if one doesn't already exist — preserves the original
+    // pre-TermiCool state so emergency revert always goes back to the true original.
+    if !backup_path.exists() {
+        fs::copy(&path, &backup_path).map_err(|e| format!("Backup failed: {}", e))?;
+    }
 
     // 2. Read and Parse
     let content = fs::read_to_string(&path).map_err(|e| format!("Failed to read settings: {}", e))?;

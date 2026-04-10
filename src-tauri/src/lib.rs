@@ -246,6 +246,96 @@ fn check_font_installed() -> bool {
 }
 
 #[tauri::command]
+async fn install_starship() -> Result<String, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
+        let local_bin = home_dir.join(".local").join("bin");
+        std::fs::create_dir_all(&local_bin).map_err(|e| e.to_string())?;
+
+        let url = "https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-musl.tar.gz";
+        let response = reqwest::get(url).await.map_err(|e| e.to_string())?;
+        let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+
+        let tmp_path = std::env::temp_dir().join("termicool_starship.tar.gz");
+        std::fs::write(&tmp_path, &bytes).map_err(|e| e.to_string())?;
+
+        let output = std::process::Command::new("tar")
+            .args(["-xzf", &tmp_path.to_string_lossy(), "-C", &local_bin.to_string_lossy(), "starship"])
+            .output()
+            .map_err(|e| format!("Failed to extract starship: {}", e))?;
+        let _ = std::fs::remove_file(&tmp_path);
+
+        if !output.status.success() {
+            return Err(format!("Extraction failed: {}", String::from_utf8_lossy(&output.stderr)));
+        }
+
+        let _ = std::process::Command::new("chmod")
+            .args(["+x", &local_bin.join("starship").to_string_lossy()])
+            .output();
+
+        // Regenerate init.sh so ~/.local/bin is guaranteed in PATH
+        let _ = sandbox::init_sandbox();
+
+        return Ok("Starship installed. Open a new terminal to activate the prompt.".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
+        let bin_dir = home_dir.join(".termicool").join("bin");
+        std::fs::create_dir_all(&bin_dir).map_err(|e| e.to_string())?;
+
+        let url = "https://github.com/starship/starship/releases/latest/download/starship-x86_64-pc-windows-msvc.zip";
+        let response = reqwest::get(url).await.map_err(|e| e.to_string())?;
+        let bytes = response.bytes().await.map_err(|e| e.to_string())?;
+
+        let tmp_zip = std::env::temp_dir().join("termicool_starship.zip");
+        std::fs::write(&tmp_zip, &bytes).map_err(|e| e.to_string())?;
+
+        let extract_dir = std::env::temp_dir().join("termicool_starship_extract");
+        let ps_cmd = format!(
+            "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
+            tmp_zip.to_string_lossy(),
+            extract_dir.to_string_lossy()
+        );
+        let output = std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_cmd])
+            .output()
+            .map_err(|e| format!("Failed to extract: {}", e))?;
+        let _ = std::fs::remove_file(&tmp_zip);
+
+        if !output.status.success() {
+            return Err(format!("Extraction failed: {}", String::from_utf8_lossy(&output.stderr)));
+        }
+
+        let src = extract_dir.join("starship.exe");
+        let dst = bin_dir.join("starship.exe");
+        std::fs::copy(&src, &dst).map_err(|e| format!("Failed to install starship.exe: {}", e))?;
+        let _ = std::fs::remove_dir_all(&extract_dir);
+
+        // Regenerate init.ps1 so ~/.termicool\bin is guaranteed in PATH
+        let _ = sandbox::init_sandbox();
+
+        return Ok("Starship installed. Open a new terminal to activate the prompt.".to_string());
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
+    {
+        Err("On macOS, install starship via: brew install starship".to_string())
+    }
+}
+
+#[tauri::command]
+fn check_starship_installed() -> bool {
+    std::process::Command::new("starship")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
 fn check_is_default() -> bool {
     let home_dir = match dirs::home_dir() {
         Some(h) => h,
@@ -308,14 +398,16 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
         .invoke_handler(tauri::generate_handler![
-            apply_theme, 
-            load_theme, 
-            load_themes, 
-            save_theme, 
+            apply_theme,
+            load_theme,
+            load_themes,
+            save_theme,
             generate_prompt,
             revert_to_default,
             download_font,
             check_font_installed,
+            install_starship,
+            check_starship_installed,
             check_is_default
         ])
         .run(tauri::generate_context!())
