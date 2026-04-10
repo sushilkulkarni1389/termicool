@@ -70,8 +70,48 @@ fn apply_theme(theme: Theme) -> Result<String, String> {
 fn load_theme(name: String) -> Result<Theme, String> {
     let home_dir = dirs::home_dir()
         .ok_or_else(|| "Could not find home directory".to_string())?;
-    let path = home_dir.join(".termicool").join("themes").join(format!("{}.json", name));
-    let content = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read theme at {:?}: {}", path, e))?;
+    
+    // Check for user-saved themes first
+    let user_path = home_dir.join(".termicool").join("themes").join(format!("{}.json", name));
+    
+    let path = if user_path.exists() {
+        user_path
+    } else {
+        // Fallback or just return a default theme if not found
+        let fallback_theme = Theme {
+            name: "Default".to_string(),
+            colors: Colors {
+                background: "#1a1b26".to_string(),
+                foreground: "#a9b1d6".to_string(),
+                cursor: "#c0caf5".to_string(),
+                selection: "#33467C".to_string(),
+                black: "#32344a".to_string(),
+                red: "#f7768e".to_string(),
+                green: "#9ece6a".to_string(),
+                yellow: "#e0af68".to_string(),
+                blue: "#7aa2f7".to_string(),
+                magenta: "#ad8ee6".to_string(),
+                cyan: "#449dab".to_string(),
+                white: "#787c99".to_string(),
+                bright_black: "#444b6a".to_string(),
+                bright_red: "#ff7a93".to_string(),
+                bright_green: "#b9f27c".to_string(),
+                bright_yellow: "#ff9e64".to_string(),
+                bright_blue: "#7da6ff".to_string(),
+                bright_magenta: "#bb9af7".to_string(),
+                bright_cyan: "#0db9d7".to_string(),
+                bright_white: "#acb0d0".to_string(),
+            }
+        };
+
+        if name == "default" || name == "Default" {
+            return Ok(fallback_theme);
+        }
+        
+        return Err(format!("Theme '{}' not found", name));
+    };
+
+    let content = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read theme: {}", e))?;
     let theme: Theme = serde_json::from_str(&content).map_err(|e| e.to_string())?;
     Ok(theme)
 }
