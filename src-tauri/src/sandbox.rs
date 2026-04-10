@@ -96,19 +96,62 @@ fn init_themes() -> Result<(), String> {
     Ok(())
 }
 
+fn get_shell_profile_path() -> Result<PathBuf, String> {
+    let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
+    
+    #[cfg(target_os = "windows")]
+    {
+        let doc_dir = dirs::document_dir().ok_or("Could not find documents directory")?;
+        let paths = [
+            doc_dir.join("PowerShell").join("Microsoft.PowerShell_profile.ps1"),
+            doc_dir.join("WindowsPowerShell").join("Microsoft.PowerShell_profile.ps1"),
+        ];
+        for p in paths {
+            if p.exists() || p.parent().map(|parent| parent.exists()).unwrap_or(false) {
+                return Ok(p);
+            }
+        }
+        return Ok(paths[0].clone());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+        if shell.contains("zsh") {
+            Ok(home_dir.join(".zshrc"))
+        } else if shell.contains("bash") {
+            Ok(home_dir.join(".bashrc"))
+        } else {
+            // Default to .bashrc for most Linux/Unix if unsure
+            let bashrc = home_dir.join(".bashrc");
+            if bashrc.exists() {
+                Ok(bashrc)
+            } else {
+                Ok(home_dir.join(".zshrc"))
+            }
+        }
+    }
+}
+
 fn setup_shell_adapter() -> Result<(), String> {
     let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
     let sandbox_dir = home_dir.join(".termicool");
     fs::create_dir_all(&sandbox_dir).map_err(|e| e.to_string())?;
 
+    let starship_config = if cfg!(target_os = "linux") {
+        home_dir.join(".config").join("starship.toml")
+    } else {
+        home_dir.join(".termicool").join("config").join("starship.toml")
+    };
+
     let init_sh_path = sandbox_dir.join("init.sh");
-    let content = "# TermiCool Shell Adapter\n\
-                   export STARSHIP_CONFIG=\"$HOME/.termicool/config/starship.toml\"\n\n\
+    let content = format!("# TermiCool Shell Adapter\n\
+                   export STARSHIP_CONFIG=\"{}\"\n\n\
                    if [ -n \"$ZSH_VERSION\" ]; then\n    \
                        eval \"$(starship init zsh)\"\n\
                    elif [ -n \"$BASH_VERSION\" ]; then\n    \
                        eval \"$(starship init bash)\"\n\
-                   fi\n";
+                   fi\n", starship_config.to_string_lossy());
 
     let mut file = fs::File::create(init_sh_path).map_err(|e| e.to_string())?;
     file.write_all(content.as_bytes()).map_err(|e| e.to_string())?;
@@ -135,73 +178,34 @@ fn setup_windows_shell_adapter() -> Result<(), String> {
 
 fn inject_shell_hook() -> Result<(), String> {
     let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
-    let profile_path: Option<PathBuf>;
+    let path = get_shell_profile_path()?;
 
-    #[cfg(target_os = "macos")]
-    {
-        let zshrc = home_dir.join(".zshrc");
-        if zshrc.exists() {
-            profile_path = Some(zshrc);
-        } else {
-            profile_path = Some(home_dir.join(".bash_profile"));
+    let content = if path.exists() {
+        fs::read_to_string(&path).map_err(|e| e.to_string())?
+    } else {
+        String::new()
+    };
+
+    if !content.contains("termicool/init") {
+        let backup_dir = home_dir.join(".termicool").join("backups");
+        fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
+        if path.exists() {
+            let filename = path.file_name().unwrap().to_str().unwrap();
+            fs::copy(&path, backup_dir.join(format!("{}.bak", filename))).map_err(|e| e.to_string())?;
         }
-    }
 
-    #[cfg(target_os = "linux")]
-    {
-        let bashrc = home_dir.join(".bashrc");
-        if bashrc.exists() {
-            profile_path = Some(bashrc);
-        } else {
-            profile_path = Some(home_dir.join(".zshrc"));
-        }
-    }
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|e| e.to_string())?;
 
-    #[cfg(target_os = "windows")]
-    {
-        let doc_dir = dirs::document_dir().ok_or("Could not find documents directory")?;
-        let paths = [
-            doc_dir.join("PowerShell").join("Microsoft.PowerShell_profile.ps1"),
-            doc_dir.join("WindowsPowerShell").join("Microsoft.PowerShell_profile.ps1"),
-        ];
-        let mut found = None;
-        for p in paths {
-            if p.exists() || p.parent().map(|parent| parent.exists()).unwrap_or(false) {
-                found = Some(p);
-                break;
-            }
-        }
-        profile_path = found;
-    }
+        #[cfg(not(target_os = "windows"))]
+        let hook = "\n# TermiCool Shell Adapter\n[ -f ~/.termicool/init.sh ] && source ~/.termicool/init.sh\n";
+        #[cfg(target_os = "windows")]
+        let hook = "\n# TermiCool PowerShell Adapter\nif (Test-Path \"$HOME\\.termicool\\init.ps1\") { . \"$HOME\\.termicool\\init.ps1\" }\n";
 
-    if let Some(path) = profile_path {
-        let content = if path.exists() {
-            fs::read_to_string(&path).map_err(|e| e.to_string())?
-        } else {
-            String::new()
-        };
-
-        if !content.contains("termicool/init") {
-            let backup_dir = home_dir.join(".termicool").join("backups");
-            fs::create_dir_all(&backup_dir).map_err(|e| e.to_string())?;
-            if path.exists() {
-                let filename = path.file_name().unwrap().to_str().unwrap();
-                fs::copy(&path, backup_dir.join(format!("{}.bak", filename))).map_err(|e| e.to_string())?;
-            }
-
-            let mut file = fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)
-                .map_err(|e| e.to_string())?;
-
-            #[cfg(not(target_os = "windows"))]
-            let hook = "\n# TermiCool Shell Adapter\n[ -f ~/.termicool/init.sh ] && source ~/.termicool/init.sh\n";
-            #[cfg(target_os = "windows")]
-            let hook = "\n# TermiCool PowerShell Adapter\nif (Test-Path \"$HOME\\.termicool\\init.ps1\") { . \"$HOME\\.termicool\\init.ps1\" }\n";
-
-            writeln!(file, "{}", hook).map_err(|e| e.to_string())?;
-        }
+        writeln!(file, "{}", hook).map_err(|e| e.to_string())?;
     }
 
     Ok(())
@@ -232,12 +236,37 @@ pub fn revert_all_to_default() -> Result<String, String> {
         }
     }
 
+    // Windows PowerShell profile check
+    #[cfg(target_os = "windows")]
+    {
+        let doc_dir = dirs::document_dir().ok_or("Could not find documents directory")?;
+        let ps_profiles = [
+            doc_dir.join("PowerShell").join("Microsoft.PowerShell_profile.ps1"),
+            doc_dir.join("WindowsPowerShell").join("Microsoft.PowerShell_profile.ps1"),
+        ];
+        for profile_path in ps_profiles {
+            let bak_path = backup_dir.join(format!("{}.bak", profile_path.file_name().unwrap().to_str().unwrap()));
+            if bak_path.exists() {
+                fs::copy(&bak_path, &profile_path).map_err(|e| format!("Failed to restore PS profile: {}", e))?;
+            } else if profile_path.exists() {
+                let content = fs::read_to_string(&profile_path).map_err(|e| e.to_string())?;
+                let filtered: Vec<String> = BufReader::new(content.as_bytes())
+                    .lines()
+                    .map(|l| l.unwrap())
+                    .filter(|line| !line.contains("termicool/init") && !line.contains("TermiCool PowerShell Adapter"))
+                    .collect();
+                fs::write(&profile_path, filtered.join("\n")).map_err(|e| e.to_string())?;
+            }
+        }
+    }
+
     // 2. Forceful macOS Reset
     #[cfg(target_os = "macos")]
     {
         let original_profile_path = backup_dir.join("mac_original_profile.txt");
         let original_profile = if original_profile_path.exists() {
-            fs::read_to_string(&original_profile_path).map_err(|e| e.to_string())?.trim().to_string()
+            let p = fs::read_to_string(&original_profile_path).map_err(|e| e.to_string())?.trim().to_string();
+            p.replace('"', "\\\"")
         } else {
             "Basic".to_string()
         };

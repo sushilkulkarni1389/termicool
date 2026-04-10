@@ -68,6 +68,9 @@ fn apply_theme(theme: Theme) -> Result<String, String> {
 
 #[tauri::command]
 fn load_theme(name: String) -> Result<Theme, String> {
+    if name.contains("..") || name.contains('/') || name.contains('\\') {
+        return Err("Invalid theme name".to_string());
+    }
     let home_dir = dirs::home_dir()
         .ok_or_else(|| "Could not find home directory".to_string())?;
     
@@ -126,6 +129,9 @@ fn generate_prompt(modules: Vec<String>) -> Result<String, String> {
 
 #[tauri::command]
 fn save_theme(name: String, theme: Theme) -> Result<String, String> {
+    if name.contains("..") || name.contains('/') || name.contains('\\') {
+        return Err("Invalid theme name".to_string());
+    }
     let home_dir = dirs::home_dir()
         .ok_or_else(|| "Could not find home directory".to_string())?;
     let themes_dir = home_dir.join(".termicool").join("themes");
@@ -184,24 +190,55 @@ fn revert_to_default() -> Result<String, String> {
 
 #[tauri::command]
 async fn download_font() -> Result<String, String> {
-    let font_url = "https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular.ttf";
+    let os = std::env::consts::OS;
+    let (font_url, font_name) = if os == "macos" {
+        ("https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular.ttf", "MesloLGS NF Regular.ttf")
+    } else {
+        ("https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular%20Mono.ttf", "MesloLGS NF Regular Mono.ttf")
+    };
+
     let font_dir = dirs::font_dir().ok_or("Could not find fonts directory")?;
-    
     std::fs::create_dir_all(&font_dir).map_err(|e| e.to_string())?;
-    let dest_path = font_dir.join("MesloLGS NF Regular.ttf");
+    let dest_path = font_dir.join(font_name);
 
     let response = reqwest::get(font_url).await.map_err(|e| e.to_string())?;
     let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-    
     std::fs::write(&dest_path, bytes).map_err(|e| e.to_string())?;
 
-    Ok(format!("Font installed to {:?}", dest_path))
+    // OS Specific Post-Install
+    if os == "linux" {
+        let _ = std::process::Command::new("fc-cache")
+            .arg("-f")
+            .arg("-v")
+            .output();
+    } else if os == "windows" {
+        // On Windows, writing to the Fonts directory is not enough for all apps.
+        // For a user-level install, registering in the registry is recommended.
+        #[cfg(target_os = "windows")]
+        {
+            use winreg::enums::*;
+            use winreg::RegKey;
+            let hkcu = RegKey::predef(HKEY_CURRENT_USER);
+            if let Ok(key) = hkcu.open_subsection_with_flags("Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts", KEY_WRITE) {
+                let _ = key.set_value(font_name, &dest_path.to_string_lossy().to_string());
+            }
+        }
+    }
+
+    Ok(format!("Font {} installed successfully", font_name))
 }
 
 #[tauri::command]
 fn check_font_installed() -> bool {
+    let os = std::env::consts::OS;
+    let font_name = if os == "macos" {
+        "MesloLGS NF Regular.ttf"
+    } else {
+        "MesloLGS NF Regular Mono.ttf"
+    };
+
     dirs::font_dir()
-        .map(|dir| dir.join("MesloLGS NF Regular.ttf").exists())
+        .map(|dir| dir.join(font_name).exists())
         .unwrap_or(false)
 }
 
@@ -270,6 +307,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_os::init())
         .invoke_handler(tauri::generate_handler![
             apply_theme, 
             load_theme, 

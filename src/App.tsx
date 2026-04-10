@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { platform } from "@tauri-apps/plugin-os";
 import { useTermStore, Colors } from "./store/useTermStore";
 import "./App.css";
 
@@ -57,7 +58,12 @@ function App() {
     if (!theme) return;
     try {
       await invoke<string>("apply_theme", { theme });
-      setStatus("Theme applied!");
+      const currentPlatform = platform();
+      if (currentPlatform === "linux" || currentPlatform === "windows") {
+        setStatus("Theme Applied! Open a new terminal window to see the changes.");
+      } else {
+        setStatus("Theme applied!");
+      }
       refreshSystemState();
     } catch (e) {
       setError(String(e));
@@ -227,16 +233,16 @@ function App() {
               <div className="settings-grid">
                 <div className="settings-card">
                   <h3>Nerd Font Installer</h3>
-                  <p>Download and install MesloLGS NF Regular for the best prompt experience.</p>
+                  <p>Download and install MesloLGS NF {platform() === "macos" ? "" : "Mono "}Regular for the best prompt experience.</p>
                   <button 
                     onClick={handleFontInstall} 
                     disabled={isLoading || isFontInstalled}
                     className={isFontInstalled ? "success-btn" : ""}
                   >
-                    {isLoading ? "Installing..." : isFontInstalled ? "Nerd Font Installed ✓" : "Install Meslo Nerd Font"}
+                    {isLoading ? "Installing..." : isFontInstalled ? "Nerd Font Installed ✓" : `Install Meslo Nerd Font${platform() === "macos" ? "" : " Mono"}`}
                   </button>
                   <p className="helper-text">
-                    Note: You must manually set your terminal's font preference to MesloLGS NF after installing.
+                    Note: You must manually set your terminal's font preference to MesloLGS NF {platform() === "macos" ? "" : "Mono "}after installing.
                   </p>
                 </div>
                 

@@ -33,12 +33,14 @@ Customizing your terminal is usually:
 - ❌ Risky (you break configs)
 - ❌ Time-consuming
 - ❌ Hard to undo
+- ❌ Security concerns (unverified scripts)
 
 **TermiCool fixes all of that.**
 
 ✅ One-click themes  
 ✅ Automatic Starship setup  
 ✅ Fully reversible changes  
+✅ Secure-first architecture (input sanitization & verified paths)
 ✅ Works across macOS, Windows, Linux  
 
 ---
@@ -113,7 +115,9 @@ npm run tauri dev
 1.  Download the installer for your OS (`.dmg`, `.exe`, `.AppImage`).
 2.  Install the app and open TermiCool.
 3.  Install the Nerd Font via the UI (if you haven't already).
-4.  **⚠️ CRITICAL:** Open your Terminal settings and manually change your display font to **MesloLGS NF** (otherwise you will see `?` missing icon boxes).
+4.  **⚠️ CRITICAL:** Open your Terminal settings and manually change your display font to:
+    *   **macOS:** `MesloLGS NF`
+    *   **Linux/Windows:** `MesloLGS NF Mono`
 5.  Select a theme in TermiCool.
 6.  Open a new terminal → done 🎉
 
@@ -186,7 +190,16 @@ Currently supported:
 
 Your terminal is missing the required glyphs.
 
-  * **Fix:** Open your Terminal emulator's preferences and change the active font to **MesloLGS NF** (or any installed Nerd Font).
+  * **Fix:** Open your Terminal emulator's preferences and change the active font to:
+    * **macOS:** `MesloLGS NF`
+    * **Linux/Windows:** `MesloLGS NF Mono`
+
+### Diagnostic Alert: "LINUX STARTUP ERROR"?
+
+This is a built-in diagnostic tool for debugging backend initialization. If this appears, ensure:
+*   You have permission to write to `~/.bashrc` and `~/.zshrc`.
+*   A Starship binary is accessible on your system.
+*   The error message JSON contains specific details to share with the dev team.
 
 ### Theme not applied?
 

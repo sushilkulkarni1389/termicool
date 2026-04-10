@@ -43,6 +43,7 @@ pub fn generate_starship_config(active_modules: Vec<String>) -> Result<(), Strin
     let toggleable_modules = ["directory", "git_branch", "nodejs", "python", "rust", "java", "cmd_duration", "time"];
     
     for module_name in &toggleable_modules {
+        // Only process modules that are in our whitelist
         let is_disabled = !active_modules.contains(&(*module_name).to_string());
         
         if let Some(item) = doc.get_mut(module_name) {
@@ -58,11 +59,16 @@ pub fn generate_starship_config(active_modules: Vec<String>) -> Result<(), Strin
 
     // Path Resolution
     let home_dir = dirs::home_dir().ok_or_else(|| "Could not find home directory".to_string())?;
-    let mut config_path = home_dir.clone();
-    config_path.push(".termicool");
-    config_path.push("config");
-    fs::create_dir_all(&config_path).map_err(|e| format!("Failed to create config dir: {}", e))?;
-    config_path.push("starship.toml");
+    
+    let config_path = if cfg!(target_os = "linux") {
+        let p = home_dir.join(".config");
+        fs::create_dir_all(&p).map_err(|e| format!("Failed to create .config dir: {}", e))?;
+        p.join("starship.toml")
+    } else {
+        let p = home_dir.join(".termicool").join("config");
+        fs::create_dir_all(&p).map_err(|e| format!("Failed to create config dir: {}", e))?;
+        p.join("starship.toml")
+    };
     
     // Write
     fs::write(&config_path, doc.to_string())
