@@ -34,8 +34,99 @@ const THEMES_JSON: &str = r##"[
   {"id": "radical", "name": "Radical", "bg": "#141321", "fg": "#a9fef7", "cursor": "#ff89d9", "selection": "#1a2c37", "black": "#141321", "red": "#ff427b", "green": "#59f68d", "yellow": "#f3e70f", "blue": "#3d94ff", "magenta": "#ff89d9", "cyan": "#8be9fd", "white": "#a9fef7"}
 ]"##;
 
+pub(crate) fn get_starship_bin_path() -> Result<PathBuf, String> {
+    let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
+    let bin_dir = home_dir.join(".termicool").join("bin");
+    fs::create_dir_all(&bin_dir).map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "windows")]
+    return Ok(bin_dir.join("starship.exe"));
+    #[cfg(not(target_os = "windows"))]
+    return Ok(bin_dir.join("starship"));
+}
+
+fn ensure_starship_installed() -> Result<(), String> {
+    let starship_bin = get_starship_bin_path()?;
+
+    if starship_bin.exists() {
+        return Ok(());
+    }
+
+    let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
+    let bin_dir = home_dir.join(".termicool").join("bin");
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let cmd = format!(
+            "curl -sS https://starship.rs/install.sh | sh -s -- -y -b \"{}\"",
+            bin_dir.to_string_lossy()
+        );
+        let output = Command::new("sh")
+            .arg("-c")
+            .arg(&cmd)
+            .output()
+            .map_err(|e| format!("Failed to run starship installer: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!(
+                "Starship installation failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let url = "https://github.com/starship/starship/releases/latest/download/starship-x86_64-pc-windows-msvc.zip";
+        let tmp_zip = std::env::temp_dir().join("termicool_starship_setup.zip");
+        let extract_dir = std::env::temp_dir().join("termicool_starship_setup");
+
+        let ps_download = format!(
+            "Invoke-WebRequest -Uri '{}' -OutFile '{}'",
+            url,
+            tmp_zip.to_string_lossy()
+        );
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_download])
+            .output()
+            .map_err(|e| format!("Failed to download starship: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!("Download failed: {}", String::from_utf8_lossy(&output.stderr)));
+        }
+
+        let ps_extract = format!(
+            "Expand-Archive -Path '{}' -DestinationPath '{}' -Force",
+            tmp_zip.to_string_lossy(),
+            extract_dir.to_string_lossy()
+        );
+        let output = Command::new("powershell")
+            .args(["-NoProfile", "-Command", &ps_extract])
+            .output()
+            .map_err(|e| format!("Failed to extract starship: {}", e))?;
+
+        let _ = fs::remove_file(&tmp_zip);
+
+        if !output.status.success() {
+            return Err(format!("Extraction failed: {}", String::from_utf8_lossy(&output.stderr)));
+        }
+
+        let src = extract_dir.join("starship.exe");
+        fs::copy(&src, &starship_bin)
+            .map_err(|e| format!("Failed to install starship.exe: {}", e))?;
+        let _ = fs::remove_dir_all(&extract_dir);
+    }
+
+    Ok(())
+}
+
 pub fn init_sandbox() -> Result<(), String> {
     init_themes()?;
+    // Best-effort: if starship can't be installed (e.g. no internet), the app still starts.
+    // The shell hook will activate starship as soon as the binary appears later.
+    if let Err(e) = ensure_starship_installed() {
+        eprintln!("[TermiCool] Starship auto-install skipped: {}", e);
+    }
     setup_shell_adapter()?;
     #[cfg(target_os = "windows")]
     setup_windows_shell_adapter()?;
@@ -178,22 +269,20 @@ fn setup_shell_adapter() -> Result<(), String> {
     };
 
     let init_sh_path = sandbox_dir.join("init.sh");
-    // On Linux, prepend ~/.local/bin so a user-installed starship binary is found
-    let path_setup = if cfg!(target_os = "linux") {
-        "export PATH=\"$HOME/.local/bin:$PATH\"\n"
-    } else {
-        ""
-    };
-    let content = format!("# TermiCool Shell Adapter\n\
-                   {}\
-                   export STARSHIP_CONFIG=\"{}\"\n\n\
-                   if command -v starship >/dev/null 2>&1; then\n  \
-                       if [ -n \"$ZSH_VERSION\" ]; then\n    \
-                           eval \"$(starship init zsh)\"\n  \
-                       elif [ -n \"$BASH_VERSION\" ]; then\n    \
-                           eval \"$(starship init bash)\"\n  \
-                       fi\n\
-                   fi\n", path_setup, starship_config.to_string_lossy());
+    let content = format!(
+        "# TermiCool Shell Adapter\n\
+         export STARSHIP_CONFIG=\"{}\"\n\
+         export STARSHIP_LOG=\"error\"\n\n\
+         TERMICOOL_STARSHIP=\"$HOME/.termicool/bin/starship\"\n\
+         if [ -x \"$TERMICOOL_STARSHIP\" ]; then\n  \
+             if [ -n \"$ZSH_VERSION\" ]; then\n    \
+                 eval \"$(\"$TERMICOOL_STARSHIP\" init zsh)\"\n  \
+             elif [ -n \"$BASH_VERSION\" ]; then\n    \
+                 eval \"$(\"$TERMICOOL_STARSHIP\" init bash)\"\n  \
+             fi\n\
+         fi\n",
+        starship_config.to_string_lossy()
+    );
 
     let mut file = fs::File::create(init_sh_path).map_err(|e| e.to_string())?;
     file.write_all(content.as_bytes()).map_err(|e| e.to_string())?;
@@ -209,10 +298,11 @@ fn setup_windows_shell_adapter() -> Result<(), String> {
 
     let init_ps1_path = sandbox_dir.join("init.ps1");
     let content = "# TermiCool PowerShell Adapter\n\
-                   $env:PATH = \"$HOME\\.termicool\\bin;$env:PATH\"\n\
-                   $env:STARSHIP_CONFIG = \"$HOME\\.termicool\\config\\starship.toml\"\n\
-                   if (Get-Command starship -ErrorAction SilentlyContinue) {\n    \
-                       Invoke-Expression (&starship init powershell)\n\
+                   $env:STARSHIP_CONFIG = \"$env:USERPROFILE\\.termicool\\config\\starship.toml\"\n\
+                   $env:STARSHIP_LOG = \"error\"\n\
+                   $termicoolStarship = \"$env:USERPROFILE\\.termicool\\bin\\starship.exe\"\n\
+                   if (Test-Path $termicoolStarship) {\n    \
+                       Invoke-Expression (& \"$termicoolStarship\" init powershell)\n\
                    }\n";
 
     let mut file = fs::File::create(init_ps1_path).map_err(|e| e.to_string())?;

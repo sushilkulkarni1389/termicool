@@ -247,37 +247,32 @@ fn check_font_installed() -> bool {
 
 #[tauri::command]
 async fn install_starship() -> Result<String, String> {
-    #[cfg(target_os = "linux")]
+    #[cfg(not(target_os = "windows"))]
     {
+        // macOS and Linux: use the official install script to ~/.termicool/bin/
         let home_dir = dirs::home_dir().ok_or("Could not find home directory")?;
-        let local_bin = home_dir.join(".local").join("bin");
-        std::fs::create_dir_all(&local_bin).map_err(|e| e.to_string())?;
+        let bin_dir = home_dir.join(".termicool").join("bin");
+        std::fs::create_dir_all(&bin_dir).map_err(|e| e.to_string())?;
 
-        let url = "https://github.com/starship/starship/releases/latest/download/starship-x86_64-unknown-linux-musl.tar.gz";
-        let response = reqwest::get(url).await.map_err(|e| e.to_string())?;
-        let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-
-        let tmp_path = std::env::temp_dir().join("termicool_starship.tar.gz");
-        std::fs::write(&tmp_path, &bytes).map_err(|e| e.to_string())?;
-
-        let output = std::process::Command::new("tar")
-            .args(["-xzf", &tmp_path.to_string_lossy(), "-C", &local_bin.to_string_lossy(), "starship"])
+        let cmd = format!(
+            "curl -sS https://starship.rs/install.sh | sh -s -- -y -b \"{}\"",
+            bin_dir.to_string_lossy()
+        );
+        let output = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(&cmd)
             .output()
-            .map_err(|e| format!("Failed to extract starship: {}", e))?;
-        let _ = std::fs::remove_file(&tmp_path);
+            .map_err(|e| format!("Failed to run starship installer: {}", e))?;
 
         if !output.status.success() {
-            return Err(format!("Extraction failed: {}", String::from_utf8_lossy(&output.stderr)));
+            return Err(format!(
+                "Starship installation failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
         }
 
-        let _ = std::process::Command::new("chmod")
-            .args(["+x", &local_bin.join("starship").to_string_lossy()])
-            .output();
-
-        // Regenerate init.sh so ~/.local/bin is guaranteed in PATH
         let _ = sandbox::init_sandbox();
-
-        return Ok("Starship installed. Open a new terminal to activate the prompt.".to_string());
+        return Ok("Starship installed to ~/.termicool/bin/. Open a new terminal to activate the prompt.".to_string());
     }
 
     #[cfg(target_os = "windows")]
@@ -314,24 +309,18 @@ async fn install_starship() -> Result<String, String> {
         std::fs::copy(&src, &dst).map_err(|e| format!("Failed to install starship.exe: {}", e))?;
         let _ = std::fs::remove_dir_all(&extract_dir);
 
-        // Regenerate init.ps1 so ~/.termicool\bin is guaranteed in PATH
         let _ = sandbox::init_sandbox();
-
-        return Ok("Starship installed. Open a new terminal to activate the prompt.".to_string());
+        return Ok("Starship installed to ~/.termicool/bin/. Open a new terminal to activate the prompt.".to_string());
     }
 
-    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
-    {
-        Err("On macOS, install starship via: brew install starship".to_string())
-    }
+    #[allow(unreachable_code)]
+    Err("Unsupported platform".to_string())
 }
 
 #[tauri::command]
 fn check_starship_installed() -> bool {
-    std::process::Command::new("starship")
-        .arg("--version")
-        .output()
-        .map(|o| o.status.success())
+    sandbox::get_starship_bin_path()
+        .map(|p| p.exists())
         .unwrap_or(false)
 }
 
