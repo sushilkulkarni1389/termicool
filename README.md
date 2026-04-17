@@ -57,13 +57,20 @@ Customizing your terminal is usually:
 - Works across `bash`, `zsh`, PowerShell  
 
 ### 🛡️ Time-Machine Failsafe
-- Full backup of your shell configs  
+- Full backup of your shell configs **and IDE settings**  
 - One-click **Emergency Revert** - Restores exact original state  
 
 ### 🌍 Cross-Platform Support
 - **macOS:** AppleScript + shell integration  
 - **Windows:** PowerShell + Windows Terminal  
 - **Linux:** GNOME Terminal, Alacritty, standard shells  
+
+### 🧩 IDE Theme Sync *(new)*
+- Optional **Apply to VS Code / Cursor** toggle on the Theme tab
+- Writes terminal ANSI colors into `workbench.colorCustomizations` while preserving every other user setting in `settings.json`
+- Backups captured on first apply; restored on **Emergency Revert**
+- Preference persists across app restarts  
+- *PyCharm / JetBrains support is currently suspended — JetBrains' 2024+ terminal engine ignores color-scheme values. Will revisit via the plugin ecosystem.*
 
 ---
 
@@ -180,6 +187,12 @@ Currently supported:
       * GNOME Terminal
       * Alacritty
 
+  * IDEs (optional, via **Apply to VS Code / Cursor** checkbox):
+
+      * VS Code
+      * Cursor
+      * *(PyCharm: suspended)*
+
 > Advanced config support (custom themes, plugin system) coming soon.
 
 -----
@@ -223,8 +236,9 @@ If not installed, restart TermiCool to trigger the auto-installer.
 
 ## 🗺️ Roadmap
 
+  * [x] IDE integration — VS Code & Cursor
   * [ ] Custom theme creator UI
-  * [ ] Plugin ecosystem
+  * [ ] Plugin ecosystem *(may restore PyCharm support)*
   * [ ] iTerm2 deep integration
   * [ ] CLI mode (`termicool apply <theme>`)
   * [ ] Cloud sync for configs

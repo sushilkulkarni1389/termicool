@@ -381,6 +381,16 @@ pub fn revert_all_to_default() -> Result<String, String> {
         }
     };
 
+    let vscode_backup_content: Option<String> = {
+        let p = termicool_dir.join("backups").join("vscode_settings.json.bak");
+        if p.exists() { fs::read_to_string(&p).ok() } else { None }
+    };
+
+    let cursor_backup_content: Option<String> = {
+        let p = termicool_dir.join("backups").join("cursor_settings.json.bak");
+        if p.exists() { fs::read_to_string(&p).ok() } else { None }
+    };
+
     // === STEP 2: Delete ~/.termicool directory ===
     if termicool_dir.exists() {
         fs::remove_dir_all(&termicool_dir).map_err(|e| format!("Failed to delete ~/.termicool: {}", e))?;
@@ -544,5 +554,112 @@ pub fn revert_all_to_default() -> Result<String, String> {
         }
     }
 
+    // === STEP 6: IDE config revert ===
+
+    if let Some(content) = vscode_backup_content {
+        let path = ide_vscode_path(&home_dir);
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(&path, content);
+    }
+
+    if let Some(content) = cursor_backup_content {
+        let path = ide_cursor_path(&home_dir);
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(&path, content);
+    }
+
+    let jb_base = ide_jetbrains_base(&home_dir);
+    if jb_base.exists() {
+        let prefixes = ["PyCharm", "IntelliJIdea", "WebStorm", "GoLand", "RustRover"];
+        if let Ok(entries) = fs::read_dir(&jb_base) {
+            for entry in entries.flatten() {
+                let entry_name = entry.file_name();
+                let entry_str = entry_name.to_string_lossy();
+                if prefixes.iter().any(|p| entry_str.starts_with(p)) {
+                    let colors_dir = entry.path().join("colors");
+                    if colors_dir.exists() {
+                        if let Ok(files) = fs::read_dir(&colors_dir) {
+                            for file in files.flatten() {
+                                let fname = file.file_name();
+                                let fname_str = fname.to_string_lossy();
+                                if fname_str.starts_with("TermiCool_") && fname_str.ends_with(".icls") {
+                                    let _ = fs::remove_file(file.path());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Ok("System restored to default successfully".to_string())
+}
+
+fn ide_vscode_path(home_dir: &PathBuf) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    return home_dir
+        .join("Library")
+        .join("Application Support")
+        .join("Code")
+        .join("User")
+        .join("settings.json");
+
+    #[cfg(target_os = "windows")]
+    return dirs::data_dir()
+        .unwrap_or_else(|| home_dir.join("AppData").join("Roaming"))
+        .join("Code")
+        .join("User")
+        .join("settings.json");
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    return home_dir
+        .join(".config")
+        .join("Code")
+        .join("User")
+        .join("settings.json");
+}
+
+fn ide_cursor_path(home_dir: &PathBuf) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    return home_dir
+        .join("Library")
+        .join("Application Support")
+        .join("Cursor")
+        .join("User")
+        .join("settings.json");
+
+    #[cfg(target_os = "windows")]
+    return dirs::data_dir()
+        .unwrap_or_else(|| home_dir.join("AppData").join("Roaming"))
+        .join("Cursor")
+        .join("User")
+        .join("settings.json");
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    return home_dir
+        .join(".config")
+        .join("Cursor")
+        .join("User")
+        .join("settings.json");
+}
+
+fn ide_jetbrains_base(home_dir: &PathBuf) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    return home_dir
+        .join("Library")
+        .join("Application Support")
+        .join("JetBrains");
+
+    #[cfg(target_os = "windows")]
+    return dirs::data_dir()
+        .unwrap_or_else(|| home_dir.join("AppData").join("Roaming"))
+        .join("JetBrains");
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    return home_dir.join(".config").join("JetBrains");
 }

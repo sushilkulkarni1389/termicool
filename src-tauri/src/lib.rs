@@ -42,6 +42,7 @@ mod win_adapter;
 mod linux_adapter;
 mod mac_adapter;
 mod sandbox;
+mod ide_adapter;
 
 #[tauri::command]
 fn apply_theme(theme: Theme) -> Result<String, String> {
@@ -376,6 +377,11 @@ fn check_is_default() -> bool {
     !profile_injected
 }
 
+#[tauri::command]
+fn apply_theme_to_ides(theme: Theme) -> Result<Vec<String>, String> {
+    ide_adapter::apply_theme_to_all_ides(&theme)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // Initialize the sandbox (themes, shell adapter, etc.)
@@ -397,7 +403,8 @@ pub fn run() {
             check_font_installed,
             install_starship,
             check_starship_installed,
-            check_is_default
+            check_is_default,
+            apply_theme_to_ides
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

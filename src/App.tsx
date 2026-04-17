@@ -22,6 +22,13 @@ function App() {
   const [status, setStatus] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [applyToIdes, setApplyToIdes] = useState<boolean>(
+    () => localStorage.getItem("termicool_apply_to_ides") === "true"
+  );
+
+  useEffect(() => {
+    localStorage.setItem("termicool_apply_to_ides", String(applyToIdes));
+  }, [applyToIdes]);
   
   // System State
   const [isFontInstalled, setIsFontInstalled] = useState(false);
@@ -70,6 +77,17 @@ function App() {
         setStatus("Theme and prompt applied!");
       }
       refreshSystemState();
+      if (applyToIdes) {
+        invoke<string[]>("apply_theme_to_ides", { theme })
+          .then((ides: string[]) => {
+            if (ides.length > 0) {
+              setStatus(`Theme applied! Also applied to: ${ides.join(", ")}`);
+            }
+          })
+          .catch((err: string) => {
+            console.error("IDE apply failed:", err);
+          });
+      }
     } catch (e) {
       setError(String(e));
     }
@@ -221,6 +239,14 @@ function App() {
               </div>
               <div className="actions">
                 <button className="primary" onClick={applyTheme}>Apply Theme</button>
+                <label className="module-toggle">
+                  <input
+                    type="checkbox"
+                    checked={applyToIdes}
+                    onChange={e => setApplyToIdes(e.target.checked)}
+                  />
+                  <span className="toggle-label">Apply to VS Code / Cursor</span>
+                </label>
               </div>
             </div>
           ) : activeTab === "theme" ? (

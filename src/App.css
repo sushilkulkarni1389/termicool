@@ -300,3 +300,11 @@ button.primary {
   padding: 1rem;
   border-radius: 6px;
 }
+
+.toggle-hint {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  display: block;
+  margin-left: 20px;
+  margin-top: 2px;
+}
