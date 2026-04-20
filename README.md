@@ -331,7 +331,7 @@ Check:
 - [x] Delete custom themes
 - [x] Security hardening (strict CSP, scoped filesystem capabilities)
 - [x] README & documentation
-- [ ] GitHub Actions packaging pipeline
+- [x] GitHub Actions packaging pipeline
 
 ---
 
