@@ -895,31 +895,61 @@ complete -F _termicool termicool
 
     let sentinel = "# TERMICOOL_CLI_COMPLETIONS";
     if !profile_content.contains("fpath=(~/.termicool/completions") {
-        let hook = match shell_name {
-            "zsh" => format!(
-                "\n{}\nfpath=(~/.termicool/completions $fpath)\nautoload -Uz compinit && compinit\n",
+        if shell_name == "zsh" {
+            // fpath must be set BEFORE compinit runs, otherwise our completions
+            // directory isn't scanned. Insert before the user's first real
+            // compinit call; fall back to appending if we can't find one.
+            let injection = format!(
+                "fpath=(~/.termicool/completions $fpath) {}",
                 sentinel
-            ),
-            "fish" => format!(
-                "\n{}\n# fish completions are auto-loaded from ~/.termicool/completions\n",
-                sentinel
-            ),
-            "powershell" => format!(
-                "\n{}\n. \"$HOME\\.termicool\\completions\\termicool.ps1\"\n",
-                sentinel
-            ),
-            _ => format!(
-                "\n{}\nsource ~/.termicool/completions/termicool.bash\n",
-                sentinel
-            ),
-        };
-        let mut file = fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&profile_path)
-            .map_err(|e| e.to_string())?;
-        use std::io::Write;
-        write!(file, "{}", hook).map_err(|e| e.to_string())?;
+            );
+
+            let compinit_idx = profile_content.lines().position(|line| {
+                let trimmed = line.trim_start();
+                trimmed.contains("compinit") && !trimmed.starts_with('#')
+            });
+
+            if let Some(idx) = compinit_idx {
+                let mut new_lines: Vec<String> =
+                    profile_content.lines().map(|s| s.to_string()).collect();
+                new_lines.insert(idx, injection);
+                let trailing_newline = profile_content.ends_with('\n');
+                let mut new_content = new_lines.join("\n");
+                if trailing_newline {
+                    new_content.push('\n');
+                }
+                fs::write(&profile_path, new_content).map_err(|e| e.to_string())?;
+            } else {
+                let hook = format!("\n{}\n", injection);
+                let mut file = fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&profile_path)
+                    .map_err(|e| e.to_string())?;
+                write!(file, "{}", hook).map_err(|e| e.to_string())?;
+            }
+        } else {
+            let hook = match shell_name {
+                "fish" => format!(
+                    "\n{}\n# fish completions are auto-loaded from ~/.termicool/completions\n",
+                    sentinel
+                ),
+                "powershell" => format!(
+                    "\n{}\n. \"$HOME\\.termicool\\completions\\termicool.ps1\"\n",
+                    sentinel
+                ),
+                _ => format!(
+                    "\n{}\nsource ~/.termicool/completions/termicool.bash\n",
+                    sentinel
+                ),
+            };
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&profile_path)
+                .map_err(|e| e.to_string())?;
+            write!(file, "{}", hook).map_err(|e| e.to_string())?;
+        }
     }
 
     #[cfg(target_os = "windows")]
