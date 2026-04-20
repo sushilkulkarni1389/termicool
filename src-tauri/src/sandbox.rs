@@ -329,7 +329,7 @@ fn inject_shell_hook() -> Result<(), String> {
         String::new()
     };
 
-    if !content.contains(".termicool") {
+    if !content.contains("TERMICOOL_START") {
         let mut file = fs::OpenOptions::new()
             .create(true)
             .append(true)

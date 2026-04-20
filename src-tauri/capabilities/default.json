@@ -10,7 +10,20 @@
     "fs:default",
     {
       "identifier": "fs:allow-write-text-file",
-      "allow": [{ "path": "**" }]
+      "allow": [
+        { "path": "$HOME/.termicool" },
+        { "path": "$HOME/.termicool/**" },
+        { "path": "$HOME/.local/bin/termicool" },
+        { "path": "$HOME/Library/Application Support/Code/User/settings.json" },
+        { "path": "$HOME/.config/Code/User/settings.json" },
+        { "path": "$HOME/AppData/Roaming/Code/User/settings.json" },
+        { "path": "$HOME/Library/Application Support/Cursor/User/settings.json" },
+        { "path": "$HOME/.config/Cursor/User/settings.json" },
+        { "path": "$HOME/AppData/Roaming/Cursor/User/settings.json" },
+        { "path": "$LOCALAPPDATA/Programs/termicool/**" },
+        { "path": "$DOWNLOAD/**" },
+        { "path": "$DESKTOP/**" }
+      ]
     }
   ]
 }
