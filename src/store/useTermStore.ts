@@ -28,6 +28,7 @@ export interface Colors {
 export interface Theme {
   name: string;
   colors: Colors;
+  id?: string;
 }
 
 interface TermState {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { platform } from "@tauri-apps/plugin-os";
 import { useTermStore, Colors, Theme } from "./store/useTermStore";
@@ -34,6 +34,28 @@ function App() {
   const [creatorSaveError, setCreatorSaveError] = useState<string | null>(null);
   const [creatorIsSaving, setCreatorIsSaving] = useState(false);
   const [themeSearch, setThemeSearch] = useState("");
+
+  // Built-in theme ids (for delete guard)
+  const [builtinIds, setBuiltinIds] = useState<string[]>([]);
+
+  // Delete theme state
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; theme: Theme | null }>({
+    open: false,
+    theme: null,
+  });
+
+  // Import theme state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importTab, setImportTab] = useState<"file" | "url">("file");
+  const [importUrl, setImportUrl] = useState("");
+  const [importIsLoading, setImportIsLoading] = useState(false);
+  const [conflictModal, setConflictModal] = useState<{
+    name: string;
+    content: string;
+    inputName: string;
+    error: string | null;
+  } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const filteredThemes = [...savedThemes]
     .sort((a, b) => a.name.localeCompare(b.name))
     .filter(t => t.name.toLowerCase().includes(themeSearch.toLowerCase()));
@@ -55,6 +77,8 @@ function App() {
       try {
         await loadInitialTheme();
         await refreshSystemState();
+        const ids = await invoke<string[]>("get_builtin_theme_ids");
+        setBuiltinIds(ids);
       } catch (e) {
         window.alert("LINUX STARTUP ERROR: " + JSON.stringify(e));
         console.error("Initialization failed", e);
@@ -231,20 +255,138 @@ function App() {
     }
   }
 
-  function handleCreatorExport() {
+  async function handleCreatorExport() {
     if (!creatorTheme) return;
     const trimmed = creatorName.trim() || "custom-theme";
     const themeToExport = { ...creatorTheme, name: trimmed };
-    const blob = new Blob(
-      [JSON.stringify(themeToExport, null, 2)],
-      { type: "application/json" }
-    );
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${trimmed.toLowerCase().replace(/\s+/g, "_")}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const json = JSON.stringify(themeToExport, null, 2);
+    const filename = `${trimmed.toLowerCase().replace(/\s+/g, "_")}.json`;
+    try {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+      const filePath = await save({
+        defaultPath: filename,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (filePath) {
+        await writeTextFile(filePath, json);
+        setStatus("Theme exported successfully");
+      }
+    } catch (e) {
+      console.error("Export failed:", e);
+      setError("Export failed");
+    }
+  }
+
+  function openImportModal() {
+    setImportTab("file");
+    setImportUrl("");
+    setImportIsLoading(false);
+    setShowImportModal(true);
+  }
+
+  async function handleImportContent(content: string) {
+    try {
+      const result = await invoke<string>("import_theme", { jsonStr: content });
+      if (result.startsWith("imported:")) {
+        const name = result.slice("imported:".length);
+        await loadAllThemes();
+        setShowImportModal(false);
+        setStatus(`Theme '${name}' imported successfully`);
+      } else if (result.startsWith("conflict:")) {
+        const name = result.slice("conflict:".length);
+        setShowImportModal(false);
+        setConflictModal({
+          name,
+          content,
+          inputName: `${name}_v2`,
+          error: null,
+        });
+      } else {
+        setError("Invalid theme file — missing required fields");
+      }
+    } catch (e) {
+      console.error("Import failed:", e);
+      setError("Invalid theme file — missing required fields");
+    }
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = reader.result as string;
+      handleImportContent(content);
+    };
+    reader.onerror = () => {
+      setError("Could not read file");
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
+  async function handleUrlFetch() {
+    const url = importUrl.trim();
+    if (!url) return;
+    setImportIsLoading(true);
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const content = await res.text();
+      await handleImportContent(content);
+    } catch (e) {
+      console.error("URL fetch failed:", e);
+      setError("Could not fetch theme from URL");
+    } finally {
+      setImportIsLoading(false);
+    }
+  }
+
+  async function handleConflictConfirm() {
+    if (!conflictModal) return;
+    const newName = conflictModal.inputName.trim();
+    if (!newName) {
+      setConflictModal({ ...conflictModal, error: "Name cannot be empty" });
+      return;
+    }
+    try {
+      const result = await invoke<string>("import_theme_as", {
+        jsonStr: conflictModal.content,
+        newName,
+      });
+      if (result.startsWith("imported:")) {
+        const name = result.slice("imported:".length);
+        await loadAllThemes();
+        setConflictModal(null);
+        setStatus(`Theme '${name}' imported successfully`);
+      } else {
+        setConflictModal({ ...conflictModal, error: "Import failed" });
+      }
+    } catch (e) {
+      setConflictModal({ ...conflictModal, error: String(e) });
+    }
+  }
+
+  function isBuiltin(t: Theme): boolean {
+    return t.id !== undefined && builtinIds.includes(t.id);
+  }
+
+  async function handleDeleteConfirm() {
+    const target = deleteConfirm.theme;
+    if (!target) return;
+    try {
+      await invoke<string>("delete_theme", { name: target.name });
+      await loadAllThemes();
+      if (activeThemeName === target.name) {
+        const fresh = useTermStore.getState().savedThemes;
+        if (fresh.length > 0) setTheme(fresh[0]);
+      }
+      setDeleteConfirm({ open: false, theme: null });
+      setStatus(`Theme '${target.name}' deleted`);
+    } catch (e) {
+      setError(String(e));
+    }
   }
 
   if (isInitializing) return <div className="loading">Loading...</div>;
@@ -277,21 +419,46 @@ function App() {
           <div className="theme-list">
             {filteredThemes.length > 0 ? (
               filteredThemes.map((t) => (
-                <button
+                <div
                   key={t.name}
+                  role="button"
+                  tabIndex={0}
                   className={`theme-item ${activeThemeName === t.name ? 'active' : ''}`}
                   onClick={() => setTheme(t)}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTheme(t); } }}
                 >
-                  {t.name}
-                </button>
+                  <span className="theme-item-name">{t.name}</span>
+                  {!isBuiltin(t) && (
+                    <button
+                      className="theme-delete-btn"
+                      title="Delete theme"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteConfirm({ open: true, theme: t });
+                      }}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-1 14H6L5 6"/>
+                        <path d="M10 11v6M14 11v6"/>
+                        <path d="M9 6V4h6v2"/>
+                      </svg>
+                    </button>
+                  )}
+                </div>
               ))
             ) : (
               <p className="sidebar-no-results">No themes found.</p>
             )}
           </div>
-          <button className="new-theme-btn" onClick={() => openCreator()}>
-            + New Theme
-          </button>
+          <div className="sidebar-btn-row">
+            <button className="new-theme-btn" onClick={() => openCreator()}>
+              + New Theme
+            </button>
+            <button className="new-theme-btn" onClick={openImportModal}>
+              ↓ Import
+            </button>
+          </div>
         </aside>
 
         <section className="content-area">
@@ -532,13 +699,13 @@ function App() {
                   </p>
                   <button
                     onClick={handleCliInstall}
-                    disabled={isCliLoading || isCliInstalled}
+                    disabled={isCliLoading}
                     className={isCliInstalled ? "success-btn" : ""}
                   >
                     {isCliLoading
                       ? "Installing..."
                       : isCliInstalled
-                      ? "CLI Installed ✓"
+                      ? "Reinstall CLI"
                       : "Install CLI"}
                   </button>
                   <p className="helper-text">
@@ -764,6 +931,130 @@ function App() {
                   </div>
                 </div>
 
+              </div>
+            </div>
+          )}
+
+          {showImportModal && (
+            <div className="creator-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setShowImportModal(false); }}>
+              <div className="import-modal">
+                <div className="creator-header">
+                  <div>
+                    <p className="creator-title">Import theme</p>
+                    <p className="creator-subtitle">Load a theme from a .json file or URL</p>
+                  </div>
+                  <button className="creator-close" onClick={() => setShowImportModal(false)}>✕</button>
+                </div>
+                <div className="import-tabs">
+                  <button
+                    className={importTab === "file" ? "active" : ""}
+                    onClick={() => setImportTab("file")}
+                  >
+                    From File
+                  </button>
+                  <button
+                    className={importTab === "url" ? "active" : ""}
+                    onClick={() => setImportTab("url")}
+                  >
+                    From URL
+                  </button>
+                </div>
+                <div className="import-body">
+                  {importTab === "file" ? (
+                    <>
+                      <p className="import-hint">Select a .json theme file from your computer.</p>
+                      <button
+                        className="creator-save-btn"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        Choose file...
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".json"
+                        style={{ display: "none" }}
+                        onChange={handleFileSelect}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <label className="creator-label">Theme URL</label>
+                      <input
+                        type="text"
+                        className="creator-name-input"
+                        placeholder="https://example.com/theme.json"
+                        value={importUrl}
+                        onChange={(e) => setImportUrl(e.target.value)}
+                      />
+                      <button
+                        className="creator-save-btn"
+                        onClick={handleUrlFetch}
+                        disabled={importIsLoading || !importUrl.trim()}
+                      >
+                        {importIsLoading ? "Fetching..." : "Fetch"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {deleteConfirm.open && deleteConfirm.theme && (
+            <div className="creator-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setDeleteConfirm({ open: false, theme: null }); }}>
+              <div className="delete-modal">
+                <div className="creator-header">
+                  <div>
+                    <p className="creator-title">Delete theme</p>
+                    <p className="creator-subtitle">Delete '{deleteConfirm.theme.name}'? This cannot be undone.</p>
+                  </div>
+                  <button className="creator-close" onClick={() => setDeleteConfirm({ open: false, theme: null })}>✕</button>
+                </div>
+                <div className="creator-footer">
+                  <div className="creator-footer-right">
+                    <button className="creator-cancel-btn" onClick={() => setDeleteConfirm({ open: false, theme: null })}>
+                      Cancel
+                    </button>
+                    <button className="delete-confirm-btn" onClick={handleDeleteConfirm}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {conflictModal && (
+            <div className="creator-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setConflictModal(null); }}>
+              <div className="import-modal">
+                <div className="creator-header">
+                  <div>
+                    <p className="creator-title">Theme name conflict</p>
+                    <p className="creator-subtitle">A theme named '{conflictModal.name}' already exists.</p>
+                  </div>
+                  <button className="creator-close" onClick={() => setConflictModal(null)}>✕</button>
+                </div>
+                <div className="import-body">
+                  <label className="creator-label">New name</label>
+                  <input
+                    type="text"
+                    className={`creator-name-input${conflictModal.error ? ' invalid' : ''}`}
+                    value={conflictModal.inputName}
+                    onChange={(e) => setConflictModal({ ...conflictModal, inputName: e.target.value, error: null })}
+                  />
+                  {conflictModal.error && <p className="creator-error">{conflictModal.error}</p>}
+                </div>
+                <div className="creator-footer">
+                  <div className="creator-footer-right">
+                    <button className="creator-cancel-btn" onClick={() => setConflictModal(null)}>
+                      Cancel
+                    </button>
+                    <button className="creator-save-btn" onClick={handleConflictConfirm}>
+                      Import as new name
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

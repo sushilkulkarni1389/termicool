@@ -169,6 +169,7 @@ fn init_themes() -> Result<(), String> {
                     bright_cyan: "#0db9d7".to_string(),
                     bright_white: "#acb0d0".to_string(),
                 },
+                id: None,
             };
             if let Ok(content) = serde_json::to_string_pretty(&theme) {
                 let _ = fs::write(&default_path, content);
@@ -210,6 +211,7 @@ fn init_themes() -> Result<(), String> {
         let theme = Theme {
             name: name.to_string(),
             colors,
+            id: None,
         };
 
         let file_path = themes_dir.join(format!("{}.json", id));
@@ -393,7 +395,7 @@ pub fn revert_all_to_default() -> Result<String, String> {
 
     // === STEP 2: Delete only TermiCool runtime dirs — preserve themes ===
     // Never delete ~/.termicool/themes/ — those are user data (built-in + custom)
-    let dirs_to_remove = ["backups", "completions", "bin"];
+    let dirs_to_remove = ["backups"];
     for dir_name in &dirs_to_remove {
         let dir_path = termicool_dir.join(dir_name);
         if dir_path.exists() {
@@ -427,13 +429,12 @@ pub fn revert_all_to_default() -> Result<String, String> {
                     .lines()
                     .map(|l| l.unwrap())
                     .filter(|line| {
-                        !line.contains(".termicool") &&
                         !line.contains("TERMICOOL_START") &&
                         !line.contains("TERMICOOL_END") &&
-                        !line.contains("TERMICOOL_CLI_PATH") &&
-                        !line.contains("TERMICOOL_CLI_COMPLETIONS") &&
-                        !line.contains("autoload -Uz compinit && compinit") &&
-                        !line.contains("starship init")
+                        !line.contains("starship init") &&
+                        !line.contains("termicool/init.sh") &&
+                        !line.contains("termicool/init.ps1") &&
+                        !line.contains("autoload -Uz compinit && compinit")
                     })
                     .collect();
                 fs::write(&profile_path, filtered.join("\n")).map_err(|e| e.to_string())?;
@@ -459,13 +460,13 @@ pub fn revert_all_to_default() -> Result<String, String> {
                             .lines()
                             .map(|l| l.unwrap())
                             .filter(|line| {
-                                !line.contains(".termicool") &&
                                 !line.contains("TERMICOOL_START") &&
                                 !line.contains("TERMICOOL_END") &&
-                                !line.contains("TERMICOOL_CLI_PATH") &&
-                                !line.contains("TERMICOOL_CLI_COMPLETIONS") &&
-                                !line.contains("autoload -Uz compinit && compinit") &&
-                                !line.contains("starship init")
+                                !line.contains("starship init") &&
+                                !line.contains("termicool/init.sh") &&
+                                !line.contains("termicool/init.ps1") &&
+                                !line.contains("termicool\\init.ps1") &&
+                                !line.contains("autoload -Uz compinit && compinit")
                             })
                             .collect();
                         fs::write(&profile_path, filtered.join("\n")).map_err(|e| e.to_string())?;

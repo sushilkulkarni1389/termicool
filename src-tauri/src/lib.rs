@@ -36,6 +36,8 @@ pub struct Colors {
 pub struct Theme {
     pub name: String,
     pub colors: Colors,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
 }
 
 pub mod win_adapter;
@@ -108,7 +110,8 @@ fn load_theme(name: String) -> Result<Theme, String> {
                 bright_magenta: "#bb9af7".to_string(),
                 bright_cyan: "#0db9d7".to_string(),
                 bright_white: "#acb0d0".to_string(),
-            }
+            },
+            id: Some("termicool_default".to_string()),
         };
 
         if name == "default" || name == "Default" || name == "termicool_default" {
@@ -119,7 +122,11 @@ fn load_theme(name: String) -> Result<Theme, String> {
     };
 
     let content = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read theme: {}", e))?;
-    let theme: Theme = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+    let mut theme: Theme = serde_json::from_str(&content).map_err(|e| e.to_string())?;
+    theme.id = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string());
     Ok(theme)
 }
 
@@ -131,6 +138,13 @@ fn generate_prompt(modules: Vec<String>) -> Result<String, String> {
     generate_starship_config(modules).map(|_| "Prompt updated".to_string())
 }
 
+fn theme_name_to_filename(name: &str) -> String {
+    name.trim()
+        .to_lowercase()
+        .replace(' ', "_")
+        .replace(|c: char| !c.is_alphanumeric() && c != '_' && c != '-', "")
+}
+
 #[tauri::command]
 fn save_theme(name: String, theme: Theme) -> Result<String, String> {
     if name.contains("..") || name.contains('/') || name.contains('\\') {
@@ -139,18 +153,175 @@ fn save_theme(name: String, theme: Theme) -> Result<String, String> {
     let home_dir = dirs::home_dir()
         .ok_or_else(|| "Could not find home directory".to_string())?;
     let themes_dir = home_dir.join(".termicool").join("themes");
-    
+
     std::fs::create_dir_all(&themes_dir)
         .map_err(|e| format!("Failed to create themes directory: {}", e))?;
-    
-    let file_path = themes_dir.join(format!("{}.json", name));
+
+    let filename = theme_name_to_filename(&name);
+    if filename.is_empty() {
+        return Err("Invalid theme name".to_string());
+    }
+    let file_path = themes_dir.join(format!("{}.json", filename));
     let content = serde_json::to_string_pretty(&theme)
         .map_err(|e| format!("Failed to serialize theme: {}", e))?;
-    
+
     std::fs::write(&file_path, content)
         .map_err(|e| format!("Failed to write theme file: {}", e))?;
-    
+
     Ok(format!("Theme '{}' saved successfully", name))
+}
+
+#[tauri::command]
+fn import_theme(json_str: String) -> Result<String, String> {
+    let theme: Theme = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Invalid theme JSON: {}", e))?;
+
+    let display_name = theme.name.trim().to_string();
+    if display_name.is_empty() {
+        return Err("Theme name is empty".to_string());
+    }
+
+    let filename = theme_name_to_filename(&display_name);
+    if filename.is_empty() {
+        return Err("Invalid theme name".to_string());
+    }
+
+    let home_dir = dirs::home_dir()
+        .ok_or_else(|| "Could not find home directory".to_string())?;
+    let themes_dir = home_dir.join(".termicool").join("themes");
+    std::fs::create_dir_all(&themes_dir)
+        .map_err(|e| format!("Failed to create themes directory: {}", e))?;
+
+    let file_path = themes_dir.join(format!("{}.json", filename));
+    if file_path.exists() {
+        return Ok(format!("conflict:{}", display_name));
+    }
+
+    let theme_to_save = Theme { name: display_name.clone(), colors: theme.colors, id: None };
+    let content = serde_json::to_string_pretty(&theme_to_save)
+        .map_err(|e| format!("Failed to serialize theme: {}", e))?;
+    std::fs::write(&file_path, content)
+        .map_err(|e| format!("Failed to write theme file: {}", e))?;
+
+    Ok(format!("imported:{}", display_name))
+}
+
+#[tauri::command]
+fn import_theme_as(json_str: String, new_name: String) -> Result<String, String> {
+    let mut theme: Theme = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Invalid theme JSON: {}", e))?;
+
+    let display_name = new_name.trim().to_string();
+    if display_name.is_empty() {
+        return Err("Theme name is empty".to_string());
+    }
+
+    let filename = theme_name_to_filename(&display_name);
+    if filename.is_empty() {
+        return Err("Invalid theme name".to_string());
+    }
+
+    theme.name = display_name.clone();
+
+    let home_dir = dirs::home_dir()
+        .ok_or_else(|| "Could not find home directory".to_string())?;
+    let themes_dir = home_dir.join(".termicool").join("themes");
+    std::fs::create_dir_all(&themes_dir)
+        .map_err(|e| format!("Failed to create themes directory: {}", e))?;
+
+    let file_path = themes_dir.join(format!("{}.json", filename));
+    let content = serde_json::to_string_pretty(&theme)
+        .map_err(|e| format!("Failed to serialize theme: {}", e))?;
+    std::fs::write(&file_path, content)
+        .map_err(|e| format!("Failed to write theme file: {}", e))?;
+
+    Ok(format!("imported:{}", display_name))
+}
+
+#[tauri::command]
+fn get_builtin_theme_ids() -> Vec<String> {
+    [
+        "termicool_default",
+        "dracula",
+        "nord",
+        "monokai",
+        "catppuccin_macchiato",
+        "gruvbox_dark",
+        "tokyo_night",
+        "solarized_dark",
+        "one_dark",
+        "synthwave_84",
+        "rose_pine",
+        "kanagawa",
+        "ayu_dark",
+        "palenight",
+        "oceanic_next",
+        "night_owl",
+        "cobalt2",
+        "github_dark",
+        "material_dark",
+        "everforest",
+        "poimandres",
+        "shades_of_purple",
+        "tomorrow_night",
+        "moonlight",
+        "cyberpunk",
+        "radical",
+    ]
+    .into_iter()
+    .map(String::from)
+    .collect()
+}
+
+#[tauri::command]
+fn delete_theme(name: String) -> Result<String, String> {
+    let filename = theme_name_to_filename(&name);
+    if filename.is_empty() {
+        return Err("Invalid theme name".to_string());
+    }
+
+    let home_dir = dirs::home_dir()
+        .ok_or_else(|| "Could not find home directory".to_string())?;
+    let themes_dir = home_dir.join(".termicool").join("themes");
+
+    let normalized_path = themes_dir.join(format!("{}.json", filename));
+    let raw_path = themes_dir.join(format!("{}.json", name.trim()));
+    let builtin_ids = get_builtin_theme_ids();
+
+    // If the normalized path resolves to a built-in but a separate
+    // user-imported file exists at the raw display-name path, prefer the
+    // raw path so we delete the user's copy rather than rejecting.
+    let actual_path = if normalized_path.exists() {
+        let norm_stem = normalized_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        if builtin_ids.iter().any(|id| id == norm_stem)
+            && raw_path.exists()
+            && raw_path != normalized_path
+        {
+            raw_path
+        } else {
+            normalized_path
+        }
+    } else if raw_path.exists() {
+        raw_path
+    } else {
+        return Err(format!("Theme '{}' not found", name));
+    };
+
+    let actual_stem = actual_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
+    if builtin_ids.iter().any(|id| id == actual_stem) {
+        return Err(format!("Cannot delete built-in theme '{}'", name));
+    }
+
+    std::fs::remove_file(&actual_path)
+        .map_err(|e| format!("Failed to delete theme: {}", e))?;
+
+    Ok(format!("deleted:{}", name))
 }
 
 #[tauri::command]
@@ -169,7 +340,11 @@ fn load_themes() -> Result<Vec<Theme>, String> {
         let path = entry.path();
         if path.extension().and_then(|s| s.to_str()) == Some("json") {
             let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-            if let Ok(theme) = serde_json::from_str::<Theme>(&content) {
+            if let Ok(mut theme) = serde_json::from_str::<Theme>(&content) {
+                theme.id = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.to_string());
                 themes.push(theme);
             }
         }
@@ -402,11 +577,17 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             apply_theme,
             load_theme,
             load_themes,
             save_theme,
+            import_theme,
+            import_theme_as,
+            get_builtin_theme_ids,
+            delete_theme,
             generate_prompt,
             revert_to_default,
             download_font,

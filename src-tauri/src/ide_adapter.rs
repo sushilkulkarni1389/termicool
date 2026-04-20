@@ -131,6 +131,12 @@ pub fn backup_ide_config(target: &IdeTarget) -> Result<(), String> {
     };
 
     let dest = backup_dir.join(backup_filename);
+    // Write-once: if a backup already exists it represents the true
+    // pre-TermiCool state. Overwriting it on every apply would clobber the
+    // original with whatever theme was applied last, breaking revert.
+    if dest.exists() {
+        return Ok(());
+    }
     fs::copy(&target.config_path, &dest)
         .map_err(|e| format!("Failed to back up {}: {}", target.name, e))?;
 
@@ -321,7 +327,6 @@ pub fn apply_theme_to_all_ides(theme: &Theme) -> Result<Vec<String>, String> {
     for target in &targets {
         if let Err(e) = backup_ide_config(target) {
             eprintln!("[TermiCool] Backup skipped for {}: {}", target.name, e);
-            continue;
         }
         if let Err(e) = apply_theme_to_ide(target, theme) {
             eprintln!("[TermiCool] Theme apply skipped for {}: {}", target.name, e);
