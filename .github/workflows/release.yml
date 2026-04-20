@@ -33,20 +33,30 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # NEW: Ensure Mac runners have both Apple Silicon and Intel targets installed
       - name: Add Rust Universal Mac Targets
         if: matrix.platform == 'macos-latest'
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Build universal CLI binary (macOS only)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          cd src-tauri
+          cargo build --bin termicool --release --target aarch64-apple-darwin
+          cargo build --bin termicool --release --target x86_64-apple-darwin
+          mkdir -p target/universal-apple-darwin/release
+          lipo -create \
+            target/aarch64-apple-darwin/release/termicool \
+            target/x86_64-apple-darwin/release/termicool \
+            -output target/universal-apple-darwin/release/termicool
 
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }} # Uses the actual tag like v0.1.5
+          tagName: ${{ github.ref_name }}
           releaseName: 'TermiCool ${{ github.ref_name }}'
           releaseBody: 'See the assets to download this version and install.'
-          releaseDraft: false # THIS MAKES IT VISIBLE INSTANTLY
+          releaseDraft: false
           prerelease: false
-          # NEW: Tells Tauri to build a Universal Binary only when running on macOS
           args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
