@@ -1,5 +1,6 @@
 [package]
 name = "tauri-app"
+default-run = "tauri-app"
 version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
@@ -27,7 +28,13 @@ toml_edit = "0.22"
 dirs = "6.0"
 reqwest = { version = "0.12", features = ["blocking"] }
 tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+
+[[bin]]
+name = "termicool"
+path = "src/bin/cli.rs"
 

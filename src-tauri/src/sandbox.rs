@@ -391,9 +391,23 @@ pub fn revert_all_to_default() -> Result<String, String> {
         if p.exists() { fs::read_to_string(&p).ok() } else { None }
     };
 
-    // === STEP 2: Delete ~/.termicool directory ===
-    if termicool_dir.exists() {
-        fs::remove_dir_all(&termicool_dir).map_err(|e| format!("Failed to delete ~/.termicool: {}", e))?;
+    // === STEP 2: Delete only TermiCool runtime dirs — preserve themes ===
+    // Never delete ~/.termicool/themes/ — those are user data (built-in + custom)
+    let dirs_to_remove = ["backups", "completions", "bin"];
+    for dir_name in &dirs_to_remove {
+        let dir_path = termicool_dir.join(dir_name);
+        if dir_path.exists() {
+            let _ = fs::remove_dir_all(&dir_path);
+        }
+    }
+    // Remove init.sh but leave themes/ intact
+    let init_sh = termicool_dir.join("init.sh");
+    if init_sh.exists() {
+        let _ = fs::remove_file(&init_sh);
+    }
+    let init_ps1 = termicool_dir.join("init.ps1");
+    if init_ps1.exists() {
+        let _ = fs::remove_file(&init_ps1);
     }
 
     // === STEP 3: Delete ~/.config/starship.toml (Linux path) ===
@@ -416,6 +430,9 @@ pub fn revert_all_to_default() -> Result<String, String> {
                         !line.contains(".termicool") &&
                         !line.contains("TERMICOOL_START") &&
                         !line.contains("TERMICOOL_END") &&
+                        !line.contains("TERMICOOL_CLI_PATH") &&
+                        !line.contains("TERMICOOL_CLI_COMPLETIONS") &&
+                        !line.contains("autoload -Uz compinit && compinit") &&
                         !line.contains("starship init")
                     })
                     .collect();
@@ -445,6 +462,9 @@ pub fn revert_all_to_default() -> Result<String, String> {
                                 !line.contains(".termicool") &&
                                 !line.contains("TERMICOOL_START") &&
                                 !line.contains("TERMICOOL_END") &&
+                                !line.contains("TERMICOOL_CLI_PATH") &&
+                                !line.contains("TERMICOOL_CLI_COMPLETIONS") &&
+                                !line.contains("autoload -Uz compinit && compinit") &&
                                 !line.contains("starship init")
                             })
                             .collect();
@@ -662,4 +682,310 @@ fn ide_jetbrains_base(home_dir: &PathBuf) -> PathBuf {
 
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     return home_dir.join(".config").join("JetBrains");
+}
+
+pub fn install_cli_binary() -> Result<String, String> {
+    // 1. Locate the CLI binary (sibling of the running app binary)
+    let current_exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let bin_dir = current_exe
+        .parent()
+        .ok_or("Cannot determine binary directory")?;
+
+    #[cfg(target_os = "windows")]
+    let cli_src = bin_dir.join("termicool.exe");
+    #[cfg(not(target_os = "windows"))]
+    let cli_src = bin_dir.join("termicool");
+
+    if !cli_src.exists() {
+        return Err(format!(
+            "CLI binary not found at {}. Please rebuild the app.",
+            cli_src.display()
+        ));
+    }
+
+    // 2. Copy binary to install destination
+    let install_dest = {
+        let home = dirs::home_dir().ok_or("Cannot determine home directory")?;
+
+        #[cfg(target_os = "windows")]
+        {
+            home.join("AppData").join("Local").join("Programs").join("termicool").join("termicool.exe")
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            home.join(".local").join("bin").join("termicool")
+        }
+    };
+
+    // Ensure install directory exists
+    if let Some(parent) = install_dest.parent() {
+        fs::create_dir_all(parent).map_err(|e| {
+            format!("Failed to create install directory {}: {}", parent.display(), e)
+        })?;
+    }
+
+    fs::copy(&cli_src, &install_dest).map_err(|e| {
+        format!(
+            "Failed to copy CLI binary to {}: {}. Try: sudo chmod 755 /usr/local/bin",
+            install_dest.display(),
+            e
+        )
+    })?;
+
+    // Make executable on Unix
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&install_dest)
+            .map_err(|e| e.to_string())?
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&install_dest, perms).map_err(|e| e.to_string())?;
+    }
+
+    // 3. Create completions directory
+    let home_dir = dirs::home_dir().ok_or("Cannot determine home directory")?;
+    let completions_dir = home_dir.join(".termicool").join("completions");
+    fs::create_dir_all(&completions_dir).map_err(|e| {
+        format!("Failed to create completions directory: {}", e)
+    })?;
+
+    // 4. Detect shell and generate completions
+    #[cfg(target_os = "windows")]
+    let shell_name = "powershell";
+    #[cfg(not(target_os = "windows"))]
+    let shell_name = {
+        // $SHELL may be unset when app is launched from GUI (Dock/Finder)
+        // Fall back to inspecting the user's default shell via dscl on macOS
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| {
+            #[cfg(target_os = "macos")]
+            {
+                let username = std::env::var("USER").unwrap_or_default();
+                std::process::Command::new("dscl")
+                    .args([".", "-read", &format!("/Users/{}", username), "UserShell"])
+                    .output()
+                    .ok()
+                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                    .unwrap_or_default()
+            }
+            #[cfg(target_os = "linux")]
+            {
+                let username = std::env::var("USER").unwrap_or_default();
+                std::process::Command::new("getent")
+                    .args(["passwd", &username])
+                    .output()
+                    .ok()
+                    .and_then(|o| String::from_utf8(o.stdout).ok())
+                    .and_then(|s| s.split(':').last().map(|s| s.trim().to_string()))
+                    .unwrap_or_default()
+            }
+        });
+        if shell.contains("zsh") {
+            "zsh"
+        } else if shell.contains("fish") {
+            "fish"
+        } else {
+            "bash"
+        }
+    };
+
+
+    // 5. Write completions file with dynamic theme completion patched in
+    let completion_file = match shell_name {
+        "zsh" => completions_dir.join("_termicool"),
+        "fish" => completions_dir.join("termicool.fish"),
+        _ => completions_dir.join("termicool.bash"),
+    };
+
+    match shell_name {
+        "zsh" => {
+            // Handwritten zsh completion — dynamic theme list via `termicool list`
+            let zsh_completions = r#"#compdef termicool
+
+_termicool_themes() {
+    local -a themes
+    themes=("${(@f)$(termicool list 2>/dev/null)}")
+    _describe 'theme' themes
+}
+
+_termicool() {
+    local -a commands
+    commands=(
+        'apply:Apply a theme by name'
+        'list:List all available themes'
+        'revert:Revert terminal to system default'
+        'completions:Print shell completion script'
+    )
+
+    _arguments -C \
+        '(-h --help)'{-h,--help}'[Print help]' \
+        '(-V --version)'{-V,--version}'[Print version]' \
+        '1: :->command' \
+        '*:: :->args'
+
+    case $state in
+        command)
+            _describe 'command' commands
+            ;;
+        args)
+            case $words[1] in
+                apply)
+                    _termicool_themes
+                    ;;
+                completions)
+                    _arguments '1: :(bash zsh fish powershell)'
+                    ;;
+            esac
+            ;;
+    esac
+}
+
+_termicool "$@"
+"#;
+            fs::write(&completion_file, zsh_completions.as_bytes())
+                .map_err(|e| e.to_string())?;
+        }
+        "fish" => {
+            // For fish: dynamic theme completion via termicool list
+            let fish_completions = r#"
+# termicool fish completions
+complete -c termicool -f
+complete -c termicool -n '__fish_use_subcommand' -a 'apply'      -d 'Apply a theme'
+complete -c termicool -n '__fish_use_subcommand' -a 'list'       -d 'List all themes'
+complete -c termicool -n '__fish_use_subcommand' -a 'revert'     -d 'Revert to default'
+complete -c termicool -n '__fish_use_subcommand' -a 'completions' -d 'Print shell completions'
+complete -c termicool -n '__fish_seen_subcommand_from apply' \
+    -a '(termicool list 2>/dev/null)'
+"#;
+            fs::write(&completion_file, fish_completions.as_bytes())
+                .map_err(|e| e.to_string())?;
+        }
+        _ => {
+            // bash: dynamic theme completion via termicool list
+            let bash_completions = r#"
+_termicool() {
+    local cur prev words cword
+    _init_completion || return
+    case "$prev" in
+        apply)
+            COMPREPLY=($(compgen -W "$(termicool list 2>/dev/null)" -- "$cur"))
+            return ;;
+        completions)
+            COMPREPLY=($(compgen -W "bash zsh fish powershell" -- "$cur"))
+            return ;;
+    esac
+    if [ "$cword" -eq 1 ]; then
+        COMPREPLY=($(compgen -W "apply list revert completions help" -- "$cur"))
+    fi
+}
+complete -F _termicool termicool
+"#;
+            fs::write(&completion_file, bash_completions.as_bytes())
+                .map_err(|e| e.to_string())?;
+        }
+    }
+
+    // 6. Inject sourcing line into shell profile (idempotent)
+    let profile_path = get_shell_profile_path()?;
+    let profile_content = if profile_path.exists() {
+        fs::read_to_string(&profile_path).map_err(|e| e.to_string())?
+    } else {
+        String::new()
+    };
+
+    let sentinel = "# TERMICOOL_CLI_COMPLETIONS";
+    if !profile_content.contains("fpath=(~/.termicool/completions") {
+        let hook = match shell_name {
+            "zsh" => format!(
+                "\n{}\nfpath=(~/.termicool/completions $fpath)\nautoload -Uz compinit && compinit\n",
+                sentinel
+            ),
+            "fish" => format!(
+                "\n{}\n# fish completions are auto-loaded from ~/.termicool/completions\n",
+                sentinel
+            ),
+            "powershell" => format!(
+                "\n{}\n. \"$HOME\\.termicool\\completions\\termicool.ps1\"\n",
+                sentinel
+            ),
+            _ => format!(
+                "\n{}\nsource ~/.termicool/completions/termicool.bash\n",
+                sentinel
+            ),
+        };
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&profile_path)
+            .map_err(|e| e.to_string())?;
+        use std::io::Write;
+        write!(file, "{}", hook).map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "windows")]
+    let path_hint = format!(
+        "CLI installed. Run this once to add to PATH:\n  setx PATH \"%PATH%;{}\"",
+        install_dest.parent().unwrap().display()
+    );
+    #[cfg(not(target_os = "windows"))]
+    let path_hint = {
+        let bin_dir = install_dest.parent().unwrap();
+        let home = dirs::home_dir().unwrap();
+        let rel = bin_dir.strip_prefix(&home).map(|p| format!("~/{}", p.display())).unwrap_or_else(|_| bin_dir.display().to_string());
+        format!(
+            "CLI installed to {}. If 'termicool' is not found, add this to your shell profile:\n  export PATH=\"{}:$PATH\"",
+            rel,
+            bin_dir.display()
+        )
+    };
+
+    // Inject PATH export into shell profile (idempotent)
+    #[cfg(not(target_os = "windows"))]
+    {
+        let profile_path = get_shell_profile_path()?;
+        let profile_content = if profile_path.exists() {
+            fs::read_to_string(&profile_path).map_err(|e| e.to_string())?
+        } else {
+            String::new()
+        };
+        let sentinel = "# TERMICOOL_CLI_PATH";
+        if !profile_content.contains(sentinel) {
+            let bin_dir = install_dest.parent().unwrap();
+            let export_line = format!(
+                "\n{}\nexport PATH=\"{}:$PATH\"\n",
+                sentinel,
+                bin_dir.display()
+            );
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&profile_path)
+                .map_err(|e| e.to_string())?;
+            use std::io::Write;
+            write!(file, "{}", export_line).map_err(|e| e.to_string())?;
+        }
+    }
+
+    Ok(path_hint)
+}
+
+pub fn check_cli_installed() -> bool {
+    let home = match dirs::home_dir() {
+        Some(h) => h,
+        None => return false,
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        home.join("AppData")
+            .join("Local")
+            .join("Programs")
+            .join("termicool")
+            .join("termicool.exe")
+            .exists()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        home.join(".local").join("bin").join("termicool").exists()
+    }
 }

@@ -3,6 +3,7 @@ use serde_json::{Map, Value};
 use std::fs;
 use std::path::PathBuf;
 
+#[allow(dead_code)]
 pub enum IdeType {
     VsCode,
     Cursor,
@@ -63,6 +64,7 @@ fn cursor_settings_path(home_dir: &PathBuf) -> PathBuf {
         .join("settings.json");
 }
 
+#[allow(dead_code)]
 fn jetbrains_base_path(home_dir: &PathBuf) -> PathBuf {
     #[cfg(target_os = "macos")]
     return home_dir

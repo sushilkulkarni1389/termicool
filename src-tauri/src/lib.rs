@@ -38,10 +38,10 @@ pub struct Theme {
     pub colors: Colors,
 }
 
-mod win_adapter;
-mod linux_adapter;
-mod mac_adapter;
-mod sandbox;
+pub mod win_adapter;
+pub mod linux_adapter;
+pub mod mac_adapter;
+pub mod sandbox;
 mod ide_adapter;
 
 #[tauri::command]
@@ -326,6 +326,16 @@ fn check_starship_installed() -> bool {
 }
 
 #[tauri::command]
+fn install_cli() -> Result<String, String> {
+    sandbox::install_cli_binary()
+}
+
+#[tauri::command]
+fn check_cli_installed() -> bool {
+    sandbox::check_cli_installed()
+}
+
+#[tauri::command]
 fn check_is_default() -> bool {
     let home_dir = match dirs::home_dir() {
         Some(h) => h,
@@ -403,6 +413,8 @@ pub fn run() {
             check_font_installed,
             install_starship,
             check_starship_installed,
+            install_cli,
+            check_cli_installed,
             check_is_default,
             apply_theme_to_ides
         ])
