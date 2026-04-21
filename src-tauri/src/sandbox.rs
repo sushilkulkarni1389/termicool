@@ -997,6 +997,56 @@ complete -F _termicool termicool
         }
     }
 
+    #[cfg(target_os = "windows")]
+    {
+        let install_dir = install_dest
+            .parent()
+            .ok_or("Cannot determine install directory")?
+            .to_string_lossy()
+            .to_string();
+
+        // Persist to user PATH via registry (survives reboots, no admin required)
+        let sentinel = "# TERMICOOL_CLI_PATH";
+        let profile_path = get_shell_profile_path()?;
+        let profile_content = if profile_path.exists() {
+            fs::read_to_string(&profile_path).map_err(|e| e.to_string())?
+        } else {
+            String::new()
+        };
+
+        if !profile_content.contains(sentinel) {
+            let hook = format!(
+                "\n{}\n$env:PATH = \"{};$env:PATH\"\n",
+                sentinel,
+                install_dir
+            );
+            let mut file = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&profile_path)
+                .map_err(|e| e.to_string())?;
+            use std::io::Write;
+            write!(file, "{}", hook).map_err(|e| e.to_string())?;
+        }
+
+        // Also persist permanently via setx so new sessions pick it up
+        // without needing to source the profile manually
+        let _ = Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!(
+                    "$old = [System.Environment]::GetEnvironmentVariable('PATH','User'); \
+                     if ($old -notlike '*{}*') {{ \
+                         [System.Environment]::SetEnvironmentVariable('PATH', \"{};$old\", 'User') \
+                     }}",
+                    install_dir.replace('\\', "\\\\"),
+                    install_dir.replace('\\', "\\\\")
+                ),
+            ])
+            .output();
+    }
+
     Ok(path_hint)
 }
 

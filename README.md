@@ -317,6 +317,20 @@ Settings handles this automatically. If you installed manually:
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
+### Windows: Starship prompt not showing in WSL or Git Bash?
+
+TermiCool applies terminal colors to Windows Terminal automatically for both WSL and Git Bash. However, the Starship prompt integration currently activates for PowerShell only.
+
+**WSL:** Follow the standard [Starship Linux setup](https://starship.rs/guide/) inside your WSL distro. You can point it at TermiCool's already-installed Starship binary by adding this to your WSL `~/.bashrc` or `~/.zshrc`:
+```bash
+eval "$(/mnt/c/Users/<YourUser>/.termicool/bin/starship init bash)"
+```
+
+**Git Bash:** Add this to `~/.bashrc` in your Windows home directory:
+```bash
+eval "$(~/.termicool/bin/starship init bash)"
+```
+
 ### Tab completion not working after CLI install?
 
 Open a **new** terminal window — fpath changes only take effect in fresh
