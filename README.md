@@ -2,12 +2,19 @@
 
 > Instantly transform your terminal — themes, prompts, and styling with zero config.
 
+[![Website](https://img.shields.io/badge/Website-termicool-00ff88?style=flat&logo=googlechrome&logoColor=black)](https://sushilkulkarni1389.github.io/termicool)
 ![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-blue)
 ![Tech Stack](https://img.shields.io/badge/Built_with-Tauri_v2%20%7C%20Rust%20%7C%20React-orange)
 ![License](https://img.shields.io/badge/License-MIT-green)
 ![Status](https://img.shields.io/badge/Status-Active-success)
 
 ![TermiCool UI](./docs/ui-screenshot.png)
+
+---
+
+## 🌐 Website
+
+**[sushilkulkarni1389.github.io/termicool](https://sushilkulkarni1389.github.io/termicool)** — full feature overview, animated demo, and platform-specific download links.
 
 ---
 
@@ -64,15 +71,19 @@ TermiCool handles all of it:
 
 ### Download
 
-Grab the latest release for your platform from the
-[GitHub Releases](https://github.com/sushilkulkarni1389/termicool/releases) page:
+👉 **[Download from the TermiCool website](https://sushilkulkarni1389.github.io/termicool)** — the site auto-detects your OS and shows the right installer.
+
+Or grab a specific build directly from
+[GitHub Releases](https://github.com/sushilkulkarni1389/termicool/releases/latest):
 
 | Platform | File |
 |----------|------|
-| macOS (Apple Silicon) | `TermiCool_aarch64.dmg` |
-| macOS (Intel) | `TermiCool_x86_64.dmg` |
-| Windows | `TermiCool_x64-setup.exe` |
-| Linux | `termicool_amd64.AppImage` |
+| macOS (Universal) | `TermiCool_0.1.0_universal.dmg` |
+| Windows (setup) | `TermiCool_0.1.0_x64-setup.exe` |
+| Windows (MSI) | `TermiCool_0.1.0_x64_en-US.msi` |
+| Linux (Debian/Ubuntu) | `TermiCool_0.1.0_amd64.deb` |
+| Linux (Fedora/RHEL) | `TermiCool-0.1.0-1.x86_64.rpm` |
+| Linux (Universal) | `TermiCool_0.1.0_amd64.AppImage` |
 
 ### First Launch
 
@@ -136,6 +147,9 @@ termicool <TAB>            # lists all commands
 
 If completions aren't working after install, open a **new** terminal window
 (the fpath injection takes effect in fresh sessions only).
+
+> **Note:** `termicool apply` applies the theme to your terminal and Starship
+> prompt only. VS Code / Cursor sync is available in the GUI.
 
 ![CLI in action](./docs/cli-screenshot.png)
 
@@ -235,7 +249,7 @@ Emergency Revert.
 | PyCharm / JetBrains | ⏸ Suspended — requires a full JetBrains plugin |
 
 > **Note:** IDE sync is GUI-only. The `termicool apply` CLI command applies
-> to your terminal only.
+> to your terminal and Starship prompt only.
 
 ---
 
@@ -332,6 +346,7 @@ Check:
 - [x] Security hardening (strict CSP, scoped filesystem capabilities)
 - [x] README & documentation
 - [x] GitHub Actions packaging pipeline
+- [x] Landing page & product website
 
 ---
 
@@ -375,6 +390,7 @@ MIT License © 2026 Sushil Kulkarni
 If TermiCool saved you time:
 
 - ⭐ Star the repo
+- 🌐 Share [the website](https://sushilkulkarni1389.github.io/termicool)
 - 🐛 [Report a bug](https://github.com/sushilkulkarni1389/termicool/issues)
 - 💡 [Suggest a feature](https://github.com/sushilkulkarni1389/termicool/issues)
 
