@@ -51,3 +51,4 @@ Thumbs.db
 
 # Project-specific
 CLAUDE.md
+src-tauri/binaries/

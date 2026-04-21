@@ -37,6 +37,6 @@ clap_complete = "4"
 winreg = "0.52"
 
 [[bin]]
-name = "termicool"
+name = "termicool-cli"
 path = "src/bin/cli.rs"
 

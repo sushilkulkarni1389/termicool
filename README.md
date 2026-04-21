@@ -348,6 +348,17 @@ Check:
 - `curl` or `wget` is available (needed for Starship auto-install)
 - Include the error message JSON when filing an issue
 
+### Windows SmartScreen warning on install?
+
+TermiCool is not yet code-signed. This is safe to proceed:
+1. Click **More info** on the SmartScreen popup
+2. Click **Run anyway**
+
+This warning appears for all unsigned apps from new publishers regardless of safety.
+If your AV software quarantines the installer or CLI binary, add an exclusion for:
+- `C:\Users\{you}\AppData\Local\TermiCool\`
+- `C:\Users\{you}\AppData\Local\Programs\termicool\`
+
 ---
 
 ## 🗺️ Roadmap

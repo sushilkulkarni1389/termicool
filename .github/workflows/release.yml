@@ -37,17 +37,35 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-      - name: Build universal CLI binary (macOS only)
+      - name: Build CLI binary (macOS universal)
         if: matrix.platform == 'macos-latest'
         run: |
           cd src-tauri
-          cargo build --bin termicool --release --target aarch64-apple-darwin
-          cargo build --bin termicool --release --target x86_64-apple-darwin
+          cargo build --bin termicool-cli --release --target aarch64-apple-darwin
+          cargo build --bin termicool-cli --release --target x86_64-apple-darwin
           mkdir -p target/universal-apple-darwin/release
           lipo -create \
-            target/aarch64-apple-darwin/release/termicool \
-            target/x86_64-apple-darwin/release/termicool \
-            -output target/universal-apple-darwin/release/termicool
+            target/aarch64-apple-darwin/release/termicool-cli \
+            target/x86_64-apple-darwin/release/termicool-cli \
+            -output target/universal-apple-darwin/release/termicool-cli
+          mkdir -p binaries
+          cp target/universal-apple-darwin/release/termicool-cli binaries/termicool-cli-universal-apple-darwin
+
+      - name: Build CLI binary (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          cd src-tauri
+          cargo build --bin termicool-cli --release
+          mkdir -p binaries
+          cp target/release/termicool-cli binaries/termicool-cli-x86_64-unknown-linux-gnu
+
+      - name: Build CLI binary (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          cd src-tauri
+          cargo build --bin termicool-cli --release
+          mkdir -p binaries
+          cp target/release/termicool-cli.exe "binaries/termicool-cli-x86_64-pc-windows-msvc.exe"
 
       - name: Build the app
         uses: tauri-apps/tauri-action@v0

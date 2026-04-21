@@ -692,10 +692,12 @@ pub fn install_cli_binary() -> Result<String, String> {
         .parent()
         .ok_or("Cannot determine binary directory")?;
 
+    #[cfg(target_os = "macos")]
+    let cli_src = bin_dir.join("termicool-cli-universal-apple-darwin");
+    #[cfg(target_os = "linux")]
+    let cli_src = bin_dir.join("termicool-cli-x86_64-unknown-linux-gnu");
     #[cfg(target_os = "windows")]
-    let cli_src = bin_dir.join("termicool.exe");
-    #[cfg(not(target_os = "windows"))]
-    let cli_src = bin_dir.join("termicool");
+    let cli_src = bin_dir.join("termicool-cli-x86_64-pc-windows-msvc.exe");
 
     if !cli_src.exists() {
         return Err(format!(
