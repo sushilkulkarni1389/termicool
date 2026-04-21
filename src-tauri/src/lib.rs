@@ -375,7 +375,17 @@ async fn download_font() -> Result<String, String> {
     #[cfg(not(target_os = "macos"))]
     let (font_url, font_name) = ("https://github.com/romkatv/powerlevel10k-media/raw/master/MesloLGS%20NF%20Regular%20Mono.ttf", "MesloLGS NF Regular Mono.ttf");
 
-    let font_dir = dirs::font_dir().ok_or("Could not find fonts directory")?;
+    let font_dir = {
+        #[cfg(target_os = "windows")]
+        {
+            let home = dirs::home_dir().ok_or("Could not find home directory")?;
+            home.join("AppData").join("Local").join("Microsoft").join("Windows").join("Fonts")
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            dirs::font_dir().ok_or("Could not find fonts directory")?
+        }
+    };
     std::fs::create_dir_all(&font_dir).map_err(|e| e.to_string())?;
     let dest_path = font_dir.join(font_name);
 

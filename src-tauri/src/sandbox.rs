@@ -795,6 +795,7 @@ pub fn install_cli_binary() -> Result<String, String> {
     let completion_file = match shell_name {
         "zsh" => completions_dir.join("_termicool"),
         "fish" => completions_dir.join("termicool.fish"),
+        "powershell" => completions_dir.join("termicool.ps1"),
         _ => completions_dir.join("termicool.bash"),
     };
 
@@ -859,6 +860,27 @@ complete -c termicool -n '__fish_seen_subcommand_from apply' \
     -a '(termicool list 2>/dev/null)'
 "#;
             fs::write(&completion_file, fish_completions.as_bytes())
+                .map_err(|e| e.to_string())?;
+        }
+        "powershell" => {
+            let ps_completions = r#"
+# termicool PowerShell completions
+function _termicoolCompletion {
+    param($wordToComplete, $commandAst, $cursorPosition)
+    $cmd = $commandAst.ToString().Trim() -split '\s+'
+    if ($cmd.Length -eq 1 -or ($cmd.Length -eq 2 -and $cmd[1] -notmatch '^-')) {
+        $subcommands = @('apply', 'list', 'revert', 'completions')
+        $subcommands | Where-Object { $_ -like "$wordToComplete*" } |
+            ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
+    } elseif ($cmd.Length -ge 2 -and $cmd[1] -eq 'apply') {
+        $themes = termicool list 2>$null
+        $themes | Where-Object { $_ -like "$wordToComplete*" } |
+            ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
+    }
+}
+Register-ArgumentCompleter -Native -CommandName termicool -ScriptBlock $Function:_termicoolCompletion
+"#;
+            fs::write(&completion_file, ps_completions.as_bytes())
                 .map_err(|e| e.to_string())?;
         }
         _ => {
