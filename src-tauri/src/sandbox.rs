@@ -693,11 +693,22 @@ pub fn install_cli_binary() -> Result<String, String> {
         .ok_or("Cannot determine binary directory")?;
 
     #[cfg(target_os = "macos")]
-    let cli_src = bin_dir.join("termicool-cli-universal-apple-darwin");
+    let cli_src = {
+        let universal = bin_dir.join("termicoolcli-universal-apple-darwin");
+        let arch_specific = bin_dir.join(format!(
+            "termicoolcli-{}-apple-darwin",
+            std::env::consts::ARCH
+        ));
+        if universal.exists() {
+            universal
+        } else {
+            arch_specific
+        }
+    };
     #[cfg(target_os = "linux")]
-    let cli_src = bin_dir.join("termicool-cli-x86_64-unknown-linux-gnu");
+    let cli_src = bin_dir.join("termicoolcli-x86_64-unknown-linux-gnu");
     #[cfg(target_os = "windows")]
-    let cli_src = bin_dir.join("termicool-cli-x86_64-pc-windows-msvc.exe");
+    let cli_src = bin_dir.join("termicoolcli-x86_64-pc-windows-msvc.exe");
 
     if !cli_src.exists() {
         return Err(format!(

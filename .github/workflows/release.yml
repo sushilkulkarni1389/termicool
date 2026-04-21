@@ -42,37 +42,37 @@ jobs:
         run: |
           cd src-tauri
           mkdir -p binaries
-          touch binaries/termicool-cli-aarch64-apple-darwin
-          touch binaries/termicool-cli-x86_64-apple-darwin
-          touch binaries/termicool-cli-universal-apple-darwin
-          cargo build --bin termicool-cli --release --target aarch64-apple-darwin
-          cargo build --bin termicool-cli --release --target x86_64-apple-darwin
+          touch binaries/termicoolcli-aarch64-apple-darwin
+          touch binaries/termicoolcli-x86_64-apple-darwin
+          touch binaries/termicoolcli-universal-apple-darwin
+          cargo build --bin termicoolcli --release --target aarch64-apple-darwin
+          cargo build --bin termicoolcli --release --target x86_64-apple-darwin
           mkdir -p target/universal-apple-darwin/release
           lipo -create \
-            target/aarch64-apple-darwin/release/termicool-cli \
-            target/x86_64-apple-darwin/release/termicool-cli \
-            -output target/universal-apple-darwin/release/termicool-cli
-          cp target/universal-apple-darwin/release/termicool-cli binaries/termicool-cli-universal-apple-darwin
-          cp target/aarch64-apple-darwin/release/termicool-cli binaries/termicool-cli-aarch64-apple-darwin
-          cp target/x86_64-apple-darwin/release/termicool-cli binaries/termicool-cli-x86_64-apple-darwin
+            target/aarch64-apple-darwin/release/termicoolcli \
+            target/x86_64-apple-darwin/release/termicoolcli \
+            -output target/universal-apple-darwin/release/termicoolcli
+          cp target/universal-apple-darwin/release/termicoolcli binaries/termicoolcli-universal-apple-darwin
+          cp target/aarch64-apple-darwin/release/termicoolcli binaries/termicoolcli-aarch64-apple-darwin
+          cp target/x86_64-apple-darwin/release/termicoolcli binaries/termicoolcli-x86_64-apple-darwin
 
       - name: Build CLI binary (Linux)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           cd src-tauri
           mkdir -p binaries
-          touch binaries/termicool-cli-x86_64-unknown-linux-gnu
-          cargo build --bin termicool-cli --release
-          cp target/release/termicool-cli binaries/termicool-cli-x86_64-unknown-linux-gnu
+          touch binaries/termicoolcli-x86_64-unknown-linux-gnu
+          cargo build --bin termicoolcli --release
+          cp target/release/termicoolcli binaries/termicoolcli-x86_64-unknown-linux-gnu
 
       - name: Build CLI binary (Windows)
         if: matrix.platform == 'windows-latest'
         run: |
           cd src-tauri
           New-Item -ItemType Directory -Force -Path binaries
-          New-Item -ItemType File -Force -Path "binaries/termicool-cli-x86_64-pc-windows-msvc.exe"
-          cargo build --bin termicool-cli --release
-          cp target/release/termicool-cli.exe "binaries/termicool-cli-x86_64-pc-windows-msvc.exe"
+          New-Item -ItemType File -Force -Path "binaries/termicoolcli-x86_64-pc-windows-msvc.exe"
+          cargo build --bin termicoolcli --release
+          cp target/release/termicoolcli.exe "binaries/termicoolcli-x86_64-pc-windows-msvc.exe"
 
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
