@@ -37,6 +37,18 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
+      - name: Pre-lipo CLI bin for macOS universal
+        if: matrix.platform == 'macos-latest'
+        run: |
+          cd src-tauri
+          cargo build --bin termicoolcli --release --target aarch64-apple-darwin
+          cargo build --bin termicoolcli --release --target x86_64-apple-darwin
+          mkdir -p target/universal-apple-darwin/release
+          lipo -create \
+            target/aarch64-apple-darwin/release/termicoolcli \
+            target/x86_64-apple-darwin/release/termicoolcli \
+            -output target/universal-apple-darwin/release/termicoolcli
+
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
         env:
