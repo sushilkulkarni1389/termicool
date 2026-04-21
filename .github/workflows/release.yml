@@ -37,43 +37,6 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-      - name: Build CLI binary (macOS universal)
-        if: matrix.platform == 'macos-latest'
-        run: |
-          cd src-tauri
-          mkdir -p binaries
-          touch binaries/termicoolcli-aarch64-apple-darwin
-          touch binaries/termicoolcli-x86_64-apple-darwin
-          touch binaries/termicoolcli-universal-apple-darwin
-          cargo build --bin termicoolcli --release --target aarch64-apple-darwin
-          cargo build --bin termicoolcli --release --target x86_64-apple-darwin
-          mkdir -p target/universal-apple-darwin/release
-          lipo -create \
-            target/aarch64-apple-darwin/release/termicoolcli \
-            target/x86_64-apple-darwin/release/termicoolcli \
-            -output target/universal-apple-darwin/release/termicoolcli
-          cp target/universal-apple-darwin/release/termicoolcli binaries/termicoolcli-universal-apple-darwin
-          cp target/aarch64-apple-darwin/release/termicoolcli binaries/termicoolcli-aarch64-apple-darwin
-          cp target/x86_64-apple-darwin/release/termicoolcli binaries/termicoolcli-x86_64-apple-darwin
-
-      - name: Build CLI binary (Linux)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          cd src-tauri
-          mkdir -p binaries
-          touch binaries/termicoolcli-x86_64-unknown-linux-gnu
-          cargo build --bin termicoolcli --release
-          cp target/release/termicoolcli binaries/termicoolcli-x86_64-unknown-linux-gnu
-
-      - name: Build CLI binary (Windows)
-        if: matrix.platform == 'windows-latest'
-        run: |
-          cd src-tauri
-          New-Item -ItemType Directory -Force -Path binaries
-          New-Item -ItemType File -Force -Path "binaries/termicoolcli-x86_64-pc-windows-msvc.exe"
-          cargo build --bin termicoolcli --release
-          cp target/release/termicoolcli.exe "binaries/termicoolcli-x86_64-pc-windows-msvc.exe"
-
       - name: Build the app
         uses: tauri-apps/tauri-action@v0
         env:
@@ -84,4 +47,4 @@ jobs:
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin --verbose' || '--verbose' }}
+          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || '' }}
