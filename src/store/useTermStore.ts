@@ -33,10 +33,12 @@ export interface Theme {
 
 interface TermState {
   theme: Theme | null;
+  originalTheme: Theme | null;
   activeThemeName: string;
   savedThemes: Theme[];
   promptModules: string[];
   setTheme: (theme: Theme) => void;
+  setOriginalTheme: (theme: Theme | null) => void;
   updateColor: (key: keyof Colors, value: string) => void;
   togglePromptModule: (module: string) => void;
   loadInitialTheme: () => Promise<void>;
@@ -48,11 +50,14 @@ export const useTermStore = create<TermState>()(
   persist(
     (set, get) => ({
       theme: null,
+      originalTheme: null,
       activeThemeName: "Default",
       savedThemes: [],
       promptModules: ['directory', 'git_branch', 'nodejs'],
-      
+
       setTheme: (theme) => set({ theme, activeThemeName: theme.name }),
+
+      setOriginalTheme: (originalTheme) => set({ originalTheme }),
       
       updateColor: (key, value) => {
         const { theme } = get();
@@ -85,6 +90,12 @@ export const useTermStore = create<TermState>()(
         const state = get();
         if (state.theme) {
           await state.loadAllThemes();
+          try {
+            const original = await invoke<Theme>("load_theme", { name: state.theme.id ?? state.activeThemeName });
+            get().setOriginalTheme(original);
+          } catch (e) {
+            console.error("Failed to load original theme snapshot:", e);
+          }
           return;
         }
 

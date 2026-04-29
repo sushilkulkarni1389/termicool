@@ -78,12 +78,12 @@ Or grab a specific build directly from
 
 | Platform | File |
 |----------|------|
-| macOS (Universal) | `TermiCool_0.1.0_universal.dmg` |
-| Windows (setup) | `TermiCool_0.1.0_x64-setup.exe` |
-| Windows (MSI) | `TermiCool_0.1.0_x64_en-US.msi` |
-| Linux (Debian/Ubuntu) | `TermiCool_0.1.0_amd64.deb` |
-| Linux (Fedora/RHEL) | `TermiCool-0.1.0-1.x86_64.rpm` |
-| Linux (Universal) | `TermiCool_0.1.0_amd64.AppImage` |
+| macOS (Universal) | `TermiCool_0.2.0_universal.dmg` |
+| Windows (setup) | `TermiCool_0.2.0_x64-setup.exe` |
+| Windows (MSI) | `TermiCool_0.2.0_x64_en-US.msi` |
+| Linux (Debian/Ubuntu) | `TermiCool_0.2.0_amd64.deb` |
+| Linux (Fedora/RHEL) | `TermiCool-0.2.0-1.x86_64.rpm` |
+| Linux (Universal) | `TermiCool_0.2.0_amd64.AppImage` |
 
 ### First Launch
 
@@ -169,6 +169,14 @@ Build your own theme from scratch or start from any built-in.
 5. Click **Save** to add it to your sidebar, or **Export** to save as a `.json` file
 
 ![Theme Creator](./docs/theme-creator.png)
+
+### Editing Built-in Themes
+
+Built-in themes are protected from being overwritten. When a built-in theme is selected:
+
+- The **Save Theme** button is replaced by **Save as New** — this saves an editable copy under a new name, leaving the original intact.
+- If you edit any colors without saving, a **Reset to Original** button appears in the header. Click it to discard all unsaved edits and restore the on-disk colors.
+- Custom and imported themes use the standard **Save Theme** button and can be freely overwritten.
 
 ---
 
@@ -372,6 +380,8 @@ If your AV software quarantines the installer or CLI binary, add an exclusion fo
 - [x] README & documentation
 - [x] GitHub Actions packaging pipeline
 - [x] Landing page & product website
+- [x] Built-in theme protection (Save as New, Reset to Original)
+- [x] Unsaved edit detection with dirty state indicator
 
 ---
 

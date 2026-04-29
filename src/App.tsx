@@ -5,16 +5,18 @@ import { useTermStore, Colors, Theme } from "./store/useTermStore";
 import "./App.css";
 
 function App() {
-  const { 
-    theme, 
+  const {
+    theme,
+    originalTheme,
     activeThemeName,
-    savedThemes, 
-    promptModules, 
-    loadInitialTheme, 
-    updateColor, 
+    savedThemes,
+    promptModules,
+    loadInitialTheme,
+    updateColor,
     togglePromptModule,
     saveTheme,
     setTheme,
+    setOriginalTheme,
     loadAllThemes
   } = useTermStore();
   
@@ -56,6 +58,15 @@ function App() {
     error: string | null;
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Save-name modal (replaces native prompt() for Save Theme / Save as New)
+  const [saveNameModal, setSaveNameModal] = useState<{
+    open: boolean;
+    defaultValue: string;
+    mode: "save" | "saveAsNew";
+  }>({ open: false, defaultValue: "", mode: "save" });
+  const [saveNameInput, setSaveNameInput] = useState("");
+  const [saveNameError, setSaveNameError] = useState("");
   const filteredThemes = [...savedThemes]
     .sort((a, b) => a.name.localeCompare(b.name))
     .filter(t => t.name.toLowerCase().includes(themeSearch.toLowerCase()));
@@ -132,15 +143,45 @@ function App() {
     }
   }
 
-  async function handleSave() {
-    const name = prompt("Enter theme name:");
-    if (name) {
-      try {
-        await saveTheme(name);
-        setStatus(`Theme '${name}' saved.`);
-      } catch (e) {
-        setError("Failed to save theme");
-      }
+  function handleSave() {
+    const defaultValue = theme?.name ?? "";
+    setSaveNameInput(defaultValue);
+    setSaveNameError("");
+    setSaveNameModal({ open: true, defaultValue, mode: "save" });
+  }
+
+  async function handleReset() {
+    try {
+      const disk = await invoke<Theme>("load_theme", { name: theme?.id ?? activeThemeName });
+      setTheme(disk);
+      setOriginalTheme(disk);
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  function handleSaveAsNew() {
+    if (!theme) return;
+    const defaultValue = `${theme.name} Copy`;
+    setSaveNameInput(defaultValue);
+    setSaveNameError("");
+    setSaveNameModal({ open: true, defaultValue, mode: "saveAsNew" });
+  }
+
+  async function handleSaveNameConfirm() {
+    const trimmed = saveNameInput.trim();
+    if (!trimmed) {
+      setSaveNameError("Theme name cannot be empty");
+      return;
+    }
+    try {
+      await saveTheme(trimmed);
+      const saved = useTermStore.getState().theme;
+      if (saved) setOriginalTheme(saved);
+      setStatus(`Theme '${trimmed}' saved.`);
+      setSaveNameModal({ open: false, defaultValue: "", mode: "save" });
+    } catch (e) {
+      setSaveNameError("Failed to save theme");
     }
   }
 
@@ -395,6 +436,15 @@ function App() {
   const normalANSI: (keyof Colors)[] = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"];
   const brightANSI: (keyof Colors)[] = ["brightBlack", "brightRed", "brightGreen", "brightYellow", "brightBlue", "brightMagenta", "brightCyan", "brightWhite"];
 
+  const allColorKeys: (keyof Colors)[] = [...coreColors, ...normalANSI, ...brightANSI];
+  const isDirty: boolean = (() => {
+    if (!theme || !originalTheme) return false;
+    for (const k of allColorKeys) {
+      if (theme.colors[k] !== originalTheme.colors[k]) return true;
+    }
+    return false;
+  })();
+
   const commonModules = ["directory", "git_branch", "nodejs", "python", "rust", "java", "cmd_duration", "time"];
 
   return (
@@ -424,8 +474,8 @@ function App() {
                   role="button"
                   tabIndex={0}
                   className={`theme-item ${activeThemeName === t.name ? 'active' : ''}`}
-                  onClick={() => setTheme(t)}
-                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTheme(t); } }}
+                  onClick={() => { setTheme(t); setOriginalTheme(t); }}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTheme(t); setOriginalTheme(t); } }}
                 >
                   <span className="theme-item-name">{t.name}</span>
                   {!isBuiltin(t) && (
@@ -473,8 +523,31 @@ function App() {
               <div className="theme-editor-left">
                 <div className="header-row">
                   <h1>Theme Editor: {activeThemeName}</h1>
-                  <button onClick={handleSave}>Save Theme</button>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    {isDirty && (
+                      <button
+                        onClick={handleReset}
+                        style={{
+                          backgroundColor: "transparent",
+                          border: "1px solid #646cff",
+                          color: "#646cff",
+                        }}
+                      >
+                        Reset to Original
+                      </button>
+                    )}
+                    {theme && isBuiltin(theme) ? (
+                      <button onClick={handleSaveAsNew}>Save as New</button>
+                    ) : (
+                      <button onClick={handleSave}>Save Theme</button>
+                    )}
+                  </div>
                 </div>
+                {theme && isBuiltin(theme) && (
+                  <p className="helper-text">
+                    Built-in themes are protected. Save as New to create an editable copy.
+                  </p>
+                )}
                 <div className="editor-grid">
                   <section>
                     <h3>Core</h3>
@@ -1052,6 +1125,67 @@ function App() {
                     </button>
                     <button className="creator-save-btn" onClick={handleConflictConfirm}>
                       Import as new name
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {saveNameModal.open && (
+            <div
+              className="creator-backdrop"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setSaveNameModal({ open: false, defaultValue: "", mode: "save" });
+                }
+              }}
+            >
+              <div className="import-modal">
+                <div className="creator-header">
+                  <div>
+                    <p className="creator-title">Save Theme</p>
+                  </div>
+                  <button
+                    className="creator-close"
+                    onClick={() => setSaveNameModal({ open: false, defaultValue: "", mode: "save" })}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="import-body">
+                  <label className="creator-label">Theme name</label>
+                  <input
+                    type="text"
+                    autoFocus
+                    className={`creator-name-input${saveNameError ? ' invalid' : ''}`}
+                    value={saveNameInput}
+                    onChange={(e) => {
+                      setSaveNameInput(e.target.value);
+                      if (saveNameError) setSaveNameError("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleSaveNameConfirm();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        setSaveNameModal({ open: false, defaultValue: "", mode: "save" });
+                      }
+                    }}
+                  />
+                  {saveNameError && <p className="creator-error">{saveNameError}</p>}
+                </div>
+                <div className="creator-footer">
+                  <div className="creator-footer-right">
+                    <button
+                      className="creator-cancel-btn"
+                      onClick={() => setSaveNameModal({ open: false, defaultValue: "", mode: "save" })}
+                    >
+                      Cancel
+                    </button>
+                    <button className="creator-save-btn" onClick={handleSaveNameConfirm}>
+                      Save
                     </button>
                   </div>
                 </div>
